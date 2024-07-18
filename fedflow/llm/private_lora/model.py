@@ -57,7 +57,7 @@ from transformers.models.llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaAttention,
 )
-from fedflow.utils.comm_util import (
+from fedflow.utils import (
     PLAB,
     recv_tensor,
     send_tensor,
@@ -771,7 +771,7 @@ class LlamaForDevice(PLLlamaPreTrainedModel):
         self.embed_tokens = nn.Embedding(
             config.vocab_size, config.hidden_size, self.padding_idx
         )
-        from fedflow.utils.comm_util import PLMStack
+        from fedflow.utils import PLMStack
 
         if config.layers_to_transform is None:
             num_layers = config.num_hidden_layers

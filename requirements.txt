@@ -11,6 +11,8 @@ scikit-learn>=0.24.1
 torch>=1.8
 prettytable==3.10.0
 termplotlib==0.3.9
+trl==0.9.6
+bitsandbytes==0.35.4
 jsonlines
 numexpr
 sqlitedict
