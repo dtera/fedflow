@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     model = model.to(args.device)
     model.vendor_to_fp16()
-    logging.info("model ready, you can now launch edge_device.py")
+    logging.info("model ready, you can now launch customer.py")
 
     s = init_tcp_cloud(args.ip, args.port)
 
