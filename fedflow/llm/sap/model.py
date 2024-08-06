@@ -1056,7 +1056,7 @@ class LlamaForCustomer(SAPLlamaPreTrainedModel):
         table.align["Param #"] = "r"  # "r" 对应右对齐
         table.align["Param %"] = "r"  # "r" 对应右对齐
         table.add_row(["word emb", emb, round(emb / total * 100, 2)])
-        table.add_row(["PrivateLoRA M", m_cnt, round(m_cnt / total * 100, 2)])
+        table.add_row(["SAPLoRA M", m_cnt, round(m_cnt / total * 100, 2)])
         table.add_row(["lm head", lmh, round(lmh / total * 100, 2)])
         print("Param statistics")
         print(table)

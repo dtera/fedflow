@@ -7,7 +7,7 @@ from fedflow.utils import send_tensor, recv_tensor, CommProfiler
 
 class PLAB(torch.nn.Module):
     def __init__(self, in_features: int, rcd: int, rdc: int, out_features: int):
-        """A,B matrices on Cloud, PrivateLorA of Q,K,V are stacked to execute in parallel
+        """A,B matrices on Cloud, Q,K,V are stacked to execute in parallel
 
         Args:
             in_features (int):
@@ -39,7 +39,7 @@ class PLAB(torch.nn.Module):
 
 class PLM(torch.nn.Module):
     def __init__(self, rcd: int, rdc: int, **kwargs) -> None:
-        """PrivateLoRA M matrix
+        """ M matrix
         1. receive compressed activations from cloud as input
         2. transform on activations
         3. send back activations
@@ -73,7 +73,7 @@ class PLM(torch.nn.Module):
 
 class PLMStack(torch.nn.Module):
     def __init__(self, num_hidden_layers: int, rcd: int, rdc: int, **kwargs) -> None:
-        """Stack of PrivateLoRA M
+        """Stack of M
 
         Args:
             num_hidden_layers (int): number of m does not necessarily equal to number of decoder layers.
