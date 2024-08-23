@@ -44,7 +44,7 @@ logging.basicConfig(
 )
 
 if __name__ == "__main__":
-    from fedflow.utils.comm_util import init_tcp_cloud
+    from fedflow.util.comm_utils import init_tcp_cloud
 
     logging.info("Loading state dict...")
     vendor_dict = torch.load(args.weight_path)

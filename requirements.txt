@@ -13,6 +13,8 @@ prettytable==3.10.0
 termplotlib==0.3.9
 trl==0.9.6
 bitsandbytes==0.35.4
+sentencepiece==0.2.0
+deepspeed==0.14.4
 jsonlines
 numexpr
 sqlitedict

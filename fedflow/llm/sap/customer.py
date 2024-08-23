@@ -1,5 +1,5 @@
 from fedflow.llm.sap.model import SAPLlamaConfig, LlamaForCustomer
-from fedflow.utils.comm_util import CommProfiler
+from fedflow.util.comm_utils import CommProfiler
 import torch
 import logging
 import argparse
@@ -47,7 +47,7 @@ logging.basicConfig(
 if __name__ == "__main__":
     mock_small = True
     load_weights = False
-    from fedflow.utils.comm_util import init_tcp_b
+    from fedflow.util.comm_utils import init_tcp_b
 
     logging.info("start connecting...")
     s = init_tcp_b(args.ip, args.port)
