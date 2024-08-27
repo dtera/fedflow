@@ -1,18 +1,11 @@
 # coding: utf-8
 # Copyright (c) dterazhao. All rights reserved.
+import logging
 import random
 from typing import List
 
-import lm_eval
 import numpy as np
 import torch
-from lm_eval.evaluator import evaluate
-from lm_eval.logger import eval_logger
-from lm_eval.models.huggingface import LoadedHFLM
-from lm_eval.utils import (
-    run_task_tests,
-    get_git_commit_hash,
-)
 from transformers import (
     Trainer,
     TrainingArguments,
@@ -271,3 +264,30 @@ def simple_evaluate(
         return results
     else:
         return None
+
+
+def add_eval_callback(training_args, lora_config_args, train_dataset, trainer, tokenizer):
+    if training_args.do_eval:
+        logging.info("add eval callback")
+        if training_args.eval_steps < 1.0:
+            eval_steps = min(
+                int(
+                    len(train_dataset)
+                    // (training_args.per_device_train_batch_size * 4)
+                    * training_args.eval_steps
+                ),
+                1,
+            )
+        else:
+            eval_steps = training_args.eval_steps
+        trainer.add_callback(
+            EvalHarnessCallBack(
+                trainer=trainer,
+                tokenizer=tokenizer,
+                tasks=lora_config_args.eval_tasks,
+                eval_steps=eval_steps,
+                eval_start=lora_config_args.eval_start,
+                do_init_eval=lora_config_args.do_init_eval,
+                eval_batch_size=training_args.per_device_eval_batch_size,
+            )
+        )

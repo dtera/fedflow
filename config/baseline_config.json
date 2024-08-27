@@ -1,6 +1,5 @@
 {
-  "is_federated": false,
-  "baseline_use_lora": true,
+  "use_lora": true,
   "peft_lora_config": {
     "r": 16,
     "lora_alpha": 32,

@@ -1,9 +1,11 @@
 # coding: utf-8
 # Copyright (c) dterazhao. All rights reserved.
+import logging
 import socket
 from dataclasses import dataclass, asdict
 
 import torch
+from peft import get_peft_model, LoraConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
 from fedflow.llm.arguments import ModelArguments
@@ -91,6 +93,23 @@ def get_model_config(model_args: ModelArguments, **kwargs):
         model_config
     """
     return _get_model_handler(model_args.model_type).get_config(model_args)
+
+
+def adapt_with_lora(lora_config_args, model):
+    if lora_config_args.use_lora:
+        model = get_peft_model(model, LoraConfig(**lora_config_args.peft_lora_config))
+    # set a,b trainable
+    if lora_config_args.trainable_a:
+        logging.info("Set lora a trainable")
+        for n, p in model.named_parameters():
+            if "lora_A" in n:
+                p.requires_grad = True
+    if lora_config_args.trainable_b:
+        logging.info("Set lora b trainable")
+        for n, p in model.named_parameters():
+            if "lora_B" in n:
+                p.requires_grad = True
+    return model
 
 
 def save_on_zero_3(training_args, trainer, model):

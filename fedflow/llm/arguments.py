@@ -3,20 +3,22 @@
 import logging
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Optional, List
 
 from peft import LoraConfig
 from transformers import (
     HfArgumentParser,
     TrainingArguments,
+    set_seed
 )
+from transformers.trainer_utils import get_last_checkpoint
 
 logging.basicConfig(level=logging.INFO)
 
 
 @dataclass
-class SAPLoraConfig:
+class FedLoraConfig:
     """arguments used in FederatedLLM experiment"""
     eval_tasks: Optional[List[str]] = field(
         default=None,
@@ -32,11 +34,7 @@ class SAPLoraConfig:
         default=False,
         metadata={"help": "whether eval before training"},
     )
-    is_federated: Optional[bool] = field(
-        default=False,
-        metadata={"help": "if True then FederatedLLM, otherwise lora or ft"},
-    )
-    baseline_use_lora: Optional[bool] = field(
+    use_lora: Optional[bool] = field(
         default=True,
         metadata={"help": "use lora"},
     )
@@ -235,15 +233,40 @@ class DataTrainingArguments:
             )
         },
     )
+    input_field: Optional[str] = field(default="input", metadata={"help": ("input field")})
+    target_field: Optional[str] = field(default="output", metadata={"help": ("target field")})
     predict_with_generate: bool = field(default=False)
     train_on_source: bool = field(default=False)
+
+
+def get_last_checkpoint_(training_args: TrainingArguments):
+    last_checkpoint = None
+    if (os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir):
+        last_checkpoint = get_last_checkpoint(training_args.output_dir)
+        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+            raise ValueError(f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                             "Use --overwrite_output_dir to overcome.")
+        elif (last_checkpoint is not None and training_args.resume_from_checkpoint is None):
+            logging.info(
+                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch.")
+    set_seed(training_args.seed)
+    return last_checkpoint
+
+
+def fetch_args_from_dataclass(data_class, dc_obj):
+    return fetch_args_from_dict(data_class, asdict(dc_obj))
+
+
+def fetch_args_from_dict(data_class, kwargs):
+    return {k: v for k, v in kwargs.items() if k in data_class.__dict__['__match_args__']}
 
 
 def parse_args():
     # See all possible arguments in src/transformers/training_args.py，or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
     parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments, SAPLoraConfig)
+        (ModelArguments, DataTrainingArguments, TrainingArguments, FedLoraConfig)
     )
     # If we pass only one argument to the script and it's the path to a json file, let's parse it to get our arguments.
     model_args, data_args, training_args, sap_lora_config_args = (
