@@ -14,7 +14,7 @@ from fedflow.util.train_utils import tb_add_text
 
 def main():
     # Parse arguments
-    model_args, data_args, training_args, lora_config_args = parse_args()
+    model_args, data_args, training_args, lora_config_args, fed_args = parse_args()
 
     # Load pretrained model and tokenizer
     model, tokenizer = get_base_model_and_tokenizer(model_args)

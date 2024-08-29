@@ -1,7 +1,7 @@
 ---
-comm_port: 10000
-role: "vender"
-part_id: "1000"
+comm_addr: "127.0.0.1:10000"
+role: "customer"
+part_id: "2000"
 use_lora: false
 peft_lora_config:
   r: 16
