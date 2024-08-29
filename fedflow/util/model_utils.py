@@ -18,10 +18,7 @@ DEFAULT_MODEL_INIT_KWARGS = {"torch_dtype": torch.bfloat16, "trust_remote_code":
 @dataclass
 class BaseModelTokenizerHandler:
     model_cls = AutoModelForCausalLM
-
-    @classmethod
-    def model_args(cls) -> ModelArguments:
-        return args["model_args"]
+    model_args: ModelArguments = lambda: args["model_args"]
 
     @classmethod
     def _model_args(cls, update_args=None):

@@ -11,10 +11,7 @@ from fedflow.util.model_utils import BaseModelTokenizerHandler
 class SAPModelTokenizerHandler(BaseModelTokenizerHandler):
     from fedflow.llm.sap.modeling_llama_sap import LlamaForCausalLM
     model_cls = LlamaForCausalLM
-
-    @classmethod
-    def fed_args(cls) -> FedArguments:
-        return args["fed_args"]
+    fed_args: FedArguments = lambda: args["fed_args"]
 
     def model_post_init(self, model):
         # only lora M is trainable
