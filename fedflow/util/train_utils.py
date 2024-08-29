@@ -2,10 +2,16 @@
 # Copyright (c) dterazhao. All rights reserved.
 from dataclasses import asdict
 
+from transformers import TrainingArguments
 from transformers.integrations import TensorBoardCallback
 
+from fedflow.llm.arguments import FedLoraConfig
+from fedflow.register import args
 
-def tb_add_text(trainer, training_args, lora_config_args, model):
+
+def tb_add_text(trainer, model):
+    training_args: TrainingArguments = args["training_args"]
+    lora_config_args: FedLoraConfig = args["lora_config_args"]
     for cb in trainer.callback_handler.callbacks:
         if isinstance(cb, TensorBoardCallback):
             if training_args.local_rank == 0:

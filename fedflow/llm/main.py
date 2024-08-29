@@ -17,14 +17,14 @@ def main():
     model_args, data_args, training_args, lora_config_args, fed_args = parse_args()
 
     # Load pretrained model and tokenizer
-    model, tokenizer = get_base_model_and_tokenizer(model_args)
+    model, tokenizer = get_base_model_and_tokenizer()
 
     # Prepare dataset
-    train_dataset = prepare_dataset(data_args) if training_args.do_train else None
+    train_dataset = prepare_dataset() if training_args.do_train else None
 
     # Initialize Trainer
     trainer = Trainer(
-        model=adapt_with_lora(lora_config_args, model),  # Adapt with original lora
+        model=adapt_with_lora(model),  # Adapt with original lora
         args=training_args,
         train_dataset=train_dataset,
         tokenizer=tokenizer,
@@ -32,13 +32,13 @@ def main():
     )
 
     # Add some text records to tensorboard
-    tb_add_text(trainer, training_args, lora_config_args, model)
+    tb_add_text(trainer, model)
 
     # Add eval callback
-    add_eval_callback(training_args, lora_config_args, train_dataset, trainer, tokenizer)
+    add_eval_callback(train_dataset, trainer, tokenizer)
 
     # Detecting last checkpoint.
-    last_checkpoint = get_last_checkpoint_(training_args)
+    last_checkpoint = get_last_checkpoint_()
 
     # Training
     if training_args.do_train:

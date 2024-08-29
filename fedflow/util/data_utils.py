@@ -10,7 +10,7 @@ from torch.nn.utils.rnn import pad_sequence
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 from fedflow.llm.arguments import DataTrainingArguments
-from fedflow.register import datas
+from fedflow.register import datas, args
 
 IGNORE_INDEX = -100
 
@@ -168,15 +168,12 @@ class BaseDatasetHandler:
         return cls.available_configs
 
 
-def prepare_dataset(data_args: DataTrainingArguments):
+def prepare_dataset():
     """prepare dataset
-
-    Args:
-        data_args: Arguments pertaining to what data we are going to input our model for training and eval.
-
     Returns:
         _type_: processed dataset
     """
+    data_args: DataTrainingArguments = args["data_args"]
     datasets = {}
     for dataset_name, dataset_path in data_args.train_dataset_name_or_paths.items():
         name, config = dataset_name.split("-")

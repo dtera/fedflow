@@ -6,10 +6,10 @@ from dataclasses import dataclass, asdict
 
 import torch
 from peft import get_peft_model, LoraConfig
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, TrainingArguments
 
-from fedflow.llm.arguments import ModelArguments
-from fedflow.register import models
+from fedflow.llm.arguments import ModelArguments, FedLoraConfig
+from fedflow.register import models, args
 from fedflow.util import send_tensor, recv_tensor, CommProfiler
 
 DEFAULT_MODEL_INIT_KWARGS = {"torch_dtype": torch.bfloat16, "trust_remote_code": True}
@@ -20,56 +20,55 @@ class BaseModelTokenizerHandler:
     model_cls = AutoModelForCausalLM
 
     @classmethod
-    def _model_args(cls, model_args: ModelArguments, update_args=None):
+    def model_args(cls) -> ModelArguments:
+        return args["model_args"]
+
+    @classmethod
+    def _model_args(cls, update_args=None):
         args = DEFAULT_MODEL_INIT_KWARGS.copy()
-        args.update((k, v) for k, v in asdict(model_args).items() if k in args)
+        args.update((k, v) for k, v in asdict(cls.model_args()).items() if k in args)
         if update_args is not None:
             args.update(update_args)
         return args
 
-    def model_post_init(self, model, model_args: ModelArguments):
+    def model_post_init(self, model):
         print(model)
         return model
 
-    def tokenizer_post_init(self, tokenizer, model_args: ModelArguments):
-        if model_args.pad_with_unk_token:
+    def tokenizer_post_init(self, tokenizer):
+        if self.model_args().pad_with_unk_token:
             tokenizer.pad_token = tokenizer.unk_token
         print(tokenizer)
         return tokenizer
 
     @classmethod
-    def get_base_model(cls, model_args: ModelArguments, state_dict=None, **kwargs):
-        model = cls.model_cls.from_pretrained(model_args.pretrained_model_name_or_path, **cls._model_args(model_args),
+    def get_base_model(cls, state_dict=None, **kwargs):
+        model = cls.model_cls.from_pretrained(cls.model_args().pretrained_model_name_or_path, **cls._model_args(),
                                               state_dict=state_dict, **kwargs)
-        return cls.model_post_init(cls, model, model_args)
+        return cls.model_post_init(cls, model)
 
     @classmethod
-    def get_base_tokenizer(cls, model_args: ModelArguments, **kwargs):
-        tokenizer_name_or_path = model_args.tokenizer_name_or_path if model_args.tokenizer_name_or_path else (
-            model_args.pretrained_model_name_or_path)
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, **cls._model_args(model_args))
-        return cls.tokenizer_post_init(cls, tokenizer, model_args)
+    def get_base_tokenizer(cls, **kwargs):
+        tokenizer_name_or_path = cls.model_args().tokenizer_name_or_path if cls.model_args().tokenizer_name_or_path else (
+            cls.model_args().pretrained_model_name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, **cls._model_args())
+        return cls.tokenizer_post_init(cls, tokenizer)
 
     @classmethod
-    def get_base_model_and_tokenizer(cls, model_args: ModelArguments, state_dict=None, **kwargs):
-        return cls.get_base_model(model_args, state_dict=state_dict, **kwargs), cls.get_base_tokenizer(model_args,
-                                                                                                       **kwargs)
+    def get_base_model_and_tokenizer(cls, state_dict=None, **kwargs):
+        return cls.get_base_model(state_dict=state_dict, **kwargs), cls.get_base_tokenizer(**kwargs)
 
     @classmethod
-    def get_config(cls, model_args: ModelArguments, **kwargs):
-        return AutoConfig.from_pretrained(model_args.pretrained_model_name_or_path, trust_remote_code=True)
+    def get_config(cls, **kwargs):
+        return AutoConfig.from_pretrained(cls.model_args().pretrained_model_name_or_path, trust_remote_code=True)
 
 
 def _get_model_handler(model_type: str):
     return models[model_type] if model_type in models else BaseModelTokenizerHandler
 
 
-def get_base_model_and_tokenizer(model_args: ModelArguments, **kwargs):
+def get_base_model_and_tokenizer(**kwargs):
     """common model and tokenizer getter, so we don't have tweak in training scripts
-
-    Args:
-        model_args (ModelArguments): model arguments.
-
     Returns:
         model, tokenizer
     Examples:
@@ -77,25 +76,23 @@ def get_base_model_and_tokenizer(model_args: ModelArguments, **kwargs):
         model, tokenizer = get_base_model_and_tokenizer("sap")
         ```
     """
+    model_args: ModelArguments = args["model_args"]
     state_dict = None
     if model_args.weights_path is not None:
         state_dict = torch.load(model_args.weights_path)
-    return _get_model_handler(model_args.model_type).get_base_model_and_tokenizer(model_args, state_dict, **kwargs)
+    return _get_model_handler(model_args.model_type).get_base_model_and_tokenizer(state_dict, **kwargs)
 
 
-def get_model_config(model_args: ModelArguments, **kwargs):
+def get_model_config(**kwargs):
     """model config getter
-
-    Args:
-       model_args (ModelArguments): model arguments.
-
     Returns:
         model_config
     """
-    return _get_model_handler(model_args.model_type).get_config(model_args)
+    return _get_model_handler(model_args.model_type).get_config(**kwargs)
 
 
-def adapt_with_lora(lora_config_args, model):
+def adapt_with_lora(model):
+    lora_config_args: FedLoraConfig = args["lora_config_args"]
     if lora_config_args.use_lora:
         model = get_peft_model(model, LoraConfig(**lora_config_args.peft_lora_config))
     # set a,b trainable
@@ -112,7 +109,8 @@ def adapt_with_lora(lora_config_args, model):
     return model
 
 
-def save_on_zero_3(training_args, trainer, model):
+def save_on_zero_3(trainer, model):
+    training_args: TrainingArguments = args["training_args"]
     # check if zero3 mode enabled
     if training_args.hf_deepspeed_config.is_zero3():
         # use deepspeed engine internal function to gather state dict

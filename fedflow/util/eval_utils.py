@@ -8,11 +8,14 @@ import numpy as np
 import torch
 from transformers import (
     Trainer,
-    TrainingArguments,
     TrainerCallback,
     TrainerState,
     TrainerControl,
+    TrainingArguments,
 )
+
+from fedflow.llm.arguments import FedLoraConfig
+from fedflow.register import args
 
 IGNORE_INDEX = -100
 
@@ -266,7 +269,9 @@ def simple_evaluate(
         return None
 
 
-def add_eval_callback(training_args, lora_config_args, train_dataset, trainer, tokenizer):
+def add_eval_callback(train_dataset, trainer, tokenizer):
+    training_args: TrainingArguments = args["training_args"]
+    lora_config_args: FedLoraConfig = args["lora_config_args"]
     if training_args.do_eval:
         logging.info("add eval callback")
         if training_args.eval_steps < 1.0:

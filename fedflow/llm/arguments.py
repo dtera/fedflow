@@ -14,7 +14,7 @@ from transformers import (
 )
 from transformers.trainer_utils import get_last_checkpoint
 
-from fedflow.register import register_arg
+from fedflow.register import args, register_arg
 
 logging.basicConfig(level=logging.INFO)
 
@@ -270,7 +270,8 @@ class DataTrainingArguments:
     train_on_source: bool = field(default=False)
 
 
-def get_last_checkpoint_(training_args: TrainingArguments):
+def get_last_checkpoint_():
+    training_args: TrainingArguments = args["training_args"]
     last_checkpoint = None
     if (os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
@@ -300,7 +301,7 @@ def parse_args():
         (ModelArguments, DataTrainingArguments, TrainingArguments, FedLoraConfig, FedArguments)
     )
     # If we pass only one argument to the script and it's the path to a json file, let's parse it to get our arguments.
-    model_args, data_args, training_args, sap_lora_config_args, fed_args = (
+    model_args, data_args, training_args, lora_config_args, fed_args = (
         (parser.parse_json_file(json_file=os.path.abspath(sys.argv[1])) if sys.argv[1].endswith(".json")
          else parser.parse_yaml_file(yaml_file=os.path.abspath(sys.argv[1])))
         if len(sys.argv) == 2 else parser.parse_args_into_dataclasses()
@@ -313,11 +314,11 @@ def parse_args():
     logging.info(f"Training/evaluation parameters {training_args}")
     logging.info(f"model parameters {model_args}")
     logging.info(f"data parameters {data_args}")
-    logging.info(f"sap_lora_config parameters {sap_lora_config_args}")
+    logging.info(f"sap_lora_config parameters {lora_config_args}")
     logging.info(f"fed_args parameters {fed_args}")
     register_arg("model_args", model_args)
     register_arg("data_args", data_args)
     register_arg("training_args", training_args)
-    register_arg("sap_lora_config_args", sap_lora_config_args)
+    register_arg("lora_config_args", lora_config_args)
     register_arg("fed_args", fed_args)
-    return model_args, data_args, training_args, sap_lora_config_args, fed_args
+    return model_args, data_args, training_args, lora_config_args, fed_args
