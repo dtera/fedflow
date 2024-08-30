@@ -24,6 +24,7 @@ pretrained_model_name_or_path: "../../../data/Llama2-7b-hf"
 num_train_epochs: 1
 train_dataset_name_or_paths:
   super_glue-boolq: "@tjasad/Slovene_SuperGLUE_BoolQ"    # Downloading form the internet if starts with @.
+data_collator: "qlora",
 per_device_eval_batch_size: 32
 eval_tasks: "boolq"
 evaluation_strategy: "no"

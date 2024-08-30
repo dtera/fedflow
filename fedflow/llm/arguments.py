@@ -3,7 +3,7 @@
 import logging
 import os
 import sys
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, replace
 from typing import Optional, List
 
 from peft import LoraConfig
@@ -46,6 +46,9 @@ class FedArguments:
             "help": "party id."
         },
     )
+
+    def is_vender(self):
+        return self.role == "vender"
 
 
 @dataclass
@@ -168,6 +171,7 @@ class DataTrainingArguments:
     """
     train_dataset_name_or_paths: dict[(str, str)] = field(default_factory=dict)
     dataset_root_dir: str = field(default="./data/")
+    data_collator: str = field(default=None)
     overwrite_cache: bool = field(
         default=False,
         metadata={"help": "Overwrite the cached training and evaluation sets"},
@@ -294,6 +298,15 @@ def fetch_args_from_dict(data_class, kwargs):
     return {k: v for k, v in kwargs.items() if k in data_class.__dict__['__match_args__']}
 
 
+def parse_cmd_args_dict():
+    args_dict = {}
+    for arg in sys.argv:
+        if "=" in arg:
+            key, value = arg.split("=")
+            args_dict.update({key: value})
+    return args_dict
+
+
 def parse_args():
     # See all possible arguments in src/transformers/training_args.py，or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
@@ -302,10 +315,18 @@ def parse_args():
     )
     # If we pass only one argument to the script and it's the path to a json file, let's parse it to get our arguments.
     model_args, data_args, training_args, lora_config_args, fed_args = (
-        (parser.parse_json_file(json_file=os.path.abspath(sys.argv[1])) if sys.argv[1].endswith(".json")
-         else parser.parse_yaml_file(yaml_file=os.path.abspath(sys.argv[1])))
-        if len(sys.argv) == 2 else parser.parse_args_into_dataclasses()
+        parser.parse_json_file(json_file=os.path.abspath(sys.argv[1])) if sys.argv[1].endswith(".json")
+        else (parser.parse_yaml_file(yaml_file=os.path.abspath(sys.argv[1])) if
+              sys.argv[1].endswith(".yaml") or sys.argv[1].endswith(".yml") else parser.parse_args_into_dataclasses())
     )
+
+    args_dict = parse_cmd_args_dict()
+    model_args = replace(model_args, **fetch_args_from_dict(ModelArguments, args_dict))
+    data_args = replace(data_args, **fetch_args_from_dict(DataTrainingArguments, args_dict))
+    training_args = replace(training_args, **fetch_args_from_dict(TrainingArguments, args_dict))
+    lora_config_args = replace(lora_config_args, **fetch_args_from_dict(FedLoraConfig, args_dict))
+    fed_args = replace(fed_args, **fetch_args_from_dict(FedArguments, args_dict))
+
     # Log on each process the small summary:
     logging.info(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "

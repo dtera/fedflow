@@ -1,30 +1,22 @@
 ---
-comm_port: 10000
-role: "vender"
-part_id: "1000"
-use_lora: false
+use_lora: true
 peft_lora_config:
   r: 16
   lora_alpha: 32
   lora_dropout: 0
   target_modules:
-    - "q_proj"
-    - "k_proj"
-    - "v_proj"
-  # - "o_proj"
-  # - "up_proj"
-  # - "gate_proj"
-  # - "down_proj"
-  layers_to_transform: # [15, 31] [19, 39] [29, 59] list(range(0, 32)) None
+    - "query_dense"
+    - "key_value_dense"
+    - "dense"
+  layers_to_transform:
     - 15
     - 31
 learning_rate: 0.005
-model_type: "sap"
-pretrained_model_name_or_path: "../../../data/Llama2-7b-hf"
+model_type: "baseline"
+pretrained_model_name_or_path: "../../../data/wxg-welm-3b/WELM-3B-32K-Chat"
 num_train_epochs: 1
 train_dataset_name_or_paths:
-  super_glue-boolq: "@tjasad/Slovene_SuperGLUE_BoolQ"    # Downloading form the internet if starts with @.
-data_collator: "qlora"
+  super_glue-boolq: "@tjasad/Slovene_SuperGLUE_BoolQ"
 per_device_eval_batch_size: 32
 eval_tasks: "boolq"
 evaluation_strategy: "no"
@@ -37,8 +29,8 @@ bf16: true
 report_to: "tensorboard"
 save_strategy: "no"
 gradient_checkpointing: false
-per_device_train_batch_size: 8
-gradient_accumulation_steps: 32
+per_device_train_batch_size: 16
+gradient_accumulation_steps: 16
 source_max_len: 900
 logging_steps: 1
 disable_tqdm: false

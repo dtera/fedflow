@@ -7,6 +7,8 @@ logger = logging.getLogger(__name__)
 
 datas = {}
 
+data_collators = {}
+
 models = {}
 
 trainers = {}

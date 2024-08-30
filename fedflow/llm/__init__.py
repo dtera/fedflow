@@ -2,4 +2,5 @@
 # Copyright (c) dterazhao. All rights reserved.
 
 import fedflow.llm.data
+import fedflow.llm.data_collator
 import fedflow.llm.model
