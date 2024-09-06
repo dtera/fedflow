@@ -6,10 +6,9 @@ import torch.distributed as dist
 from transformers import Trainer
 
 from fedflow.llm.arguments import parse_args, fetch_args_from_dataclass, get_last_checkpoint_
-from fedflow.util.data_utils import prepare_dataset
-from fedflow.util.eval_utils import add_eval_callback
-from fedflow.util.model_utils import get_base_model_and_tokenizer, adapt_with_lora, save_on_zero_3
-from fedflow.util.train_utils import tb_add_text
+from fedflow.util import (
+    prepare_dataset, add_eval_callback, get_base_model_and_tokenizer, save_on_zero_3, tb_add_text
+)
 
 
 def main():
@@ -25,7 +24,7 @@ def main():
     from fedflow.register import data_collators
     # Initialize Trainer
     trainer = Trainer(
-        model=adapt_with_lora(model),  # Adapt with original lora
+        model=model,
         args=training_args,
         train_dataset=train_dataset,
         tokenizer=tokenizer,

@@ -1,9 +1,11 @@
+import argparse
+import logging
+
+import torch
+from transformers import AutoTokenizer
+
 from fedflow.llm.sap.model import SAPLlamaConfig, LlamaForCustomer
 from fedflow.util.comm_utils import CommProfiler
-import torch
-import logging
-import argparse
-from transformers import AutoTokenizer
 
 parser = argparse.ArgumentParser()
 
@@ -47,10 +49,10 @@ logging.basicConfig(
 if __name__ == "__main__":
     mock_small = True
     load_weights = False
-    from fedflow.util.comm_utils import init_tcp_b
+    from fedflow.util.comm_utils import init_tcp_client
 
     logging.info("start connecting...")
-    s = init_tcp_b(args.ip, args.port)
+    s = init_tcp_client(args.ip, args.port)
     config = SAPLlamaConfig.from_pretrained(args.llama_path)
     config.rcd = 128
     config.rdc = 128

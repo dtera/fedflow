@@ -19,6 +19,7 @@ DEFAULT_MODEL_INIT_KWARGS = {"torch_dtype": torch.bfloat16, "trust_remote_code":
 class BaseModelTokenizerHandler:
     model_cls = AutoModelForCausalLM
     model_args: ModelArguments = lambda: args["model_args"]
+    config_args: FedLoraConfig = lambda: args["lora_config_args"]
 
     @classmethod
     def _model_args(cls, update_args=None):
@@ -28,12 +29,17 @@ class BaseModelTokenizerHandler:
             args.update(update_args)
         return args
 
-    def model_post_init(self, model):
+    @classmethod
+    def model_post_init(cls, model):
         print(model)
+        if cls.model_args().is_baseline() and cls.config_args().use_lora:
+            model = get_peft_model(model, cls.config_args().peft_lora_config)
+            model.print_trainable_parameters()
         return model
 
-    def tokenizer_post_init(self, tokenizer):
-        if self.model_args().pad_with_unk_token:
+    @classmethod
+    def tokenizer_post_init(cls, tokenizer):
+        if cls.model_args().pad_with_unk_token:
             tokenizer.pad_token = tokenizer.unk_token
         print(tokenizer)
         return tokenizer
@@ -42,14 +48,14 @@ class BaseModelTokenizerHandler:
     def get_base_model(cls, state_dict=None, **kwargs):
         model = cls.model_cls.from_pretrained(cls.model_args().pretrained_model_name_or_path, **cls._model_args(),
                                               state_dict=state_dict, **kwargs)
-        return cls.model_post_init(cls, model)
+        return cls.model_post_init(model)
 
     @classmethod
     def get_base_tokenizer(cls, **kwargs):
         tokenizer_name_or_path = cls.model_args().tokenizer_name_or_path if cls.model_args().tokenizer_name_or_path else (
             cls.model_args().pretrained_model_name_or_path)
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, **cls._model_args())
-        return cls.tokenizer_post_init(cls, tokenizer)
+        return cls.tokenizer_post_init(tokenizer)
 
     @classmethod
     def get_base_model_and_tokenizer(cls, state_dict=None, **kwargs):
@@ -92,17 +98,7 @@ def adapt_with_lora(model):
     lora_config_args: FedLoraConfig = args["lora_config_args"]
     if lora_config_args.use_lora:
         model = get_peft_model(model, LoraConfig(**lora_config_args.peft_lora_config))
-    # set a,b trainable
-    if lora_config_args.trainable_a:
-        logging.info("Set lora a trainable")
-        for n, p in model.named_parameters():
-            if "lora_A" in n:
-                p.requires_grad = True
-    if lora_config_args.trainable_b:
-        logging.info("Set lora b trainable")
-        for n, p in model.named_parameters():
-            if "lora_B" in n:
-                p.requires_grad = True
+    print(model)
     return model
 
 

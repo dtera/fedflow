@@ -15,6 +15,8 @@ trainers = {}
 
 args = {}
 
+commons = {}
+
 
 def register(key, module, module_dict):
     if key in module_dict:

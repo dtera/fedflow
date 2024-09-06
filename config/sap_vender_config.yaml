@@ -15,9 +15,7 @@ peft_lora_config:
   # - "up_proj"
   # - "gate_proj"
   # - "down_proj"
-  layers_to_transform: # [15, 31] [19, 39] [29, 59] list(range(0, 32)) None
-    - 15
-    - 31
+  layers_to_transform: "range(0, 32)" # [15, 31] [19, 39] [29, 59] range(0, 32) None
 learning_rate: 0.005
 model_type: "sap"
 pretrained_model_name_or_path: "../../../data/Llama2-7b-hf"

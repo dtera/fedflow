@@ -14,6 +14,7 @@ from transformers import (
 )
 from transformers.trainer_utils import get_last_checkpoint
 
+from fedflow.llm.tuners import FedPeftType, FedTaskType
 from fedflow.register import args, register_arg
 
 logging.basicConfig(level=logging.INFO)
@@ -35,7 +36,7 @@ class FedArguments:
         },
     )
     role: Optional[str] = field(
-        default="vender",
+        default=None,
         metadata={
             "help": "role: vender or customer."
         },
@@ -77,14 +78,6 @@ class FedLoraConfig:
         metadata={
             "help": "lora configuration for target modules and target layers"
         },
-    )
-    trainable_a: Optional[bool] = field(
-        default=False,
-        metadata={"help": "whether matrix a is trainable in FederatedLLM"},
-    )
-    trainable_b: Optional[bool] = field(
-        default=False,
-        metadata={"help": "whether matrix b is trainable in FederatedLLM"},
     )
 
 
@@ -162,6 +155,9 @@ class ModelArguments:
             )
         },
     )
+
+    def is_baseline(self):
+        return self.model_type == "baseline"
 
 
 @dataclass
@@ -321,11 +317,21 @@ def parse_args():
     )
 
     args_dict = parse_cmd_args_dict()
-    model_args = replace(model_args, **fetch_args_from_dict(ModelArguments, args_dict))
-    data_args = replace(data_args, **fetch_args_from_dict(DataTrainingArguments, args_dict))
-    training_args = replace(training_args, **fetch_args_from_dict(TrainingArguments, args_dict))
-    lora_config_args = replace(lora_config_args, **fetch_args_from_dict(FedLoraConfig, args_dict))
-    fed_args = replace(fed_args, **fetch_args_from_dict(FedArguments, args_dict))
+    model_args: ModelArguments = replace(model_args, **fetch_args_from_dict(ModelArguments, args_dict))
+    data_args: DataTrainingArguments = replace(data_args, **fetch_args_from_dict(DataTrainingArguments, args_dict))
+    training_args: TrainingArguments = replace(training_args, **fetch_args_from_dict(TrainingArguments, args_dict))
+    lora_config_args: FedLoraConfig = replace(lora_config_args, **fetch_args_from_dict(FedLoraConfig, args_dict))
+    fed_args: FedArguments = replace(fed_args, **fetch_args_from_dict(FedArguments, args_dict))
+    layers_to_transform = lora_config_args.peft_lora_config["layers_to_transform"]
+    if isinstance(layers_to_transform, str):
+        layers_to_transform = eval(layers_to_transform)
+        if not (isinstance(layers_to_transform, int) or isinstance(layers_to_transform, list)):
+            layers_to_transform = list(layers_to_transform)
+    lora_config_args.peft_lora_config = LoraConfig(**lora_config_args.peft_lora_config)
+    lora_config_args.peft_lora_config.layers_to_transform = layers_to_transform
+    if not model_args.is_baseline():
+        lora_config_args.peft_lora_config.peft_type = FedPeftType.FED_LORA
+        lora_config_args.peft_lora_config.task_type = FedTaskType.FED_CAUSAL_LM
 
     # Log on each process the small summary:
     logging.info(

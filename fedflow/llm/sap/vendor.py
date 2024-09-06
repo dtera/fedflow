@@ -1,8 +1,10 @@
-import torch
-import time
-from fedflow.llm.sap.model import SAPLlamaConfig, LlamaForVender
-import logging
 import argparse
+import logging
+import time
+
+import torch
+
+from fedflow.llm.sap.model import SAPLlamaConfig, LlamaForVender
 
 parser = argparse.ArgumentParser()
 
@@ -44,7 +46,7 @@ logging.basicConfig(
 )
 
 if __name__ == "__main__":
-    from fedflow.util.comm_utils import init_tcp_cloud
+    from fedflow.util.comm_utils import init_tcp_server
 
     logging.info("Loading state dict...")
     vendor_dict = torch.load(args.weight_path)
@@ -72,7 +74,7 @@ if __name__ == "__main__":
     model.vendor_to_fp16()
     logging.info("model ready, you can now launch customer.py")
 
-    s = init_tcp_cloud(args.ip, args.port)
+    s = init_tcp_server(args.ip, args.port)
 
     logging.info("Enter listening loop")
     # listening loop of server

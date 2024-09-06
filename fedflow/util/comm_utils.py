@@ -1,13 +1,14 @@
 # coding=utf-8
 
-import socket
-import torch
-import time
-import pickle
 import logging
-from prettytable import PrettyTable, ALL
-import termplotlib as tpl
+import pickle
+import socket
+import time
+
 import numpy as np
+import termplotlib as tpl
+import torch
+from prettytable import PrettyTable, ALL
 
 END_OF_MESSAGE = "\n\t".encode()
 END_OF_GENERATE = "finish".encode()
@@ -130,7 +131,7 @@ def numpy_pickle_decoding(data):
     return torch.Tensor(pickle.loads(data))
 
 
-def init_tcp_b(ip="127.0.0.1", port=12345):
+def init_tcp_client(ip="127.0.0.1", port=12345):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((ip, port))
     print("device connected")
@@ -169,11 +170,11 @@ def recv_tensor(
     return tensor
 
 
-def init_tcp_cloud(ip="127.0.0.1", port=12345):
-    """init tcp socket for central cloud
+def init_tcp_server(ip="0.0.0.0", port=12345):
+    """init tcp socket for central server
 
     Args:
-        ip (str, optional): _description_. Defaults to "127.0.0.1".
+        ip (str, optional): _description_. Defaults to "0.0.0.0".
         port (int, optional): _description_. Defaults to 12345.
 
     Returns:
@@ -181,10 +182,10 @@ def init_tcp_cloud(ip="127.0.0.1", port=12345):
     """
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((ip, port))
-    print("cloud listen")
+    print(f"Server is listening on {socket.gethostbyname(socket.gethostname())}:{port}")
     s.listen(1)
     conn, addr = s.accept()
-    print("cloud connected")
+    print(f"Client[addr:{addr}] is connected")
     return conn
 
 

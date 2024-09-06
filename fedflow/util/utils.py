@@ -1,7 +1,28 @@
 # coding: utf-8
 # Copyright (c) dterazhao. All rights reserved.
 import glob
+from enum import Enum
 from os.path import dirname, basename, isfile, join
+from typing import Any
+
+
+class EnumBase(str, Enum):
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, Enum):
+            return self.value == other.value
+        return False
+
+
+def extend_enum(parent_enum, is_raw_enum=False):
+    def wrapper(extended_enum):
+        joined = {}
+        for item in parent_enum:
+            joined[item.name] = item.value
+        for item in extended_enum:
+            joined[item.name] = item.value
+        return (Enum if is_raw_enum else EnumBase)(extended_enum.__name__, joined)
+
+    return wrapper
 
 
 def get_modules(f, exclude_fs=['__init__.py'], pre_modules=None):
