@@ -4,14 +4,14 @@ import enum
 
 from peft import PeftType, TaskType
 
-from fedflow.util.utils import extend_enum
+from fedflow.util import extend_enum
 
 
-@extend_enum(PeftType, is_raw_enum=True)
+@extend_enum(PeftType)
 class FedPeftType(str, enum.Enum):
     FED_LORA = "FED_LORA"
 
 
-@extend_enum(TaskType, is_raw_enum=True)
+@extend_enum(TaskType)
 class FedTaskType(str, enum.Enum):
     FED_CAUSAL_LM = "FED_CAUSAL_LM"

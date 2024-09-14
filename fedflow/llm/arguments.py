@@ -6,7 +6,9 @@ import sys
 from dataclasses import dataclass, field, asdict, replace
 from typing import Optional, List
 
-from peft import LoraConfig
+from peft import LoraConfig, PEFT_TYPE_TO_CONFIG_MAPPING, MODEL_TYPE_TO_PEFT_MODEL_MAPPING
+from peft.mapping import PEFT_TYPE_TO_TUNER_MAPPING
+from peft.peft_model import PEFT_TYPE_TO_MODEL_MAPPING
 from transformers import (
     HfArgumentParser,
     TrainingArguments,
@@ -14,25 +16,25 @@ from transformers import (
 )
 from transformers.trainer_utils import get_last_checkpoint
 
-from fedflow.llm.tuners import FedPeftType, FedTaskType
 from fedflow.register import args, register_arg
+from .tuners import FedPeftType, FedTaskType, FedLoraModel
 
 logging.basicConfig(level=logging.INFO)
 
 
 @dataclass
 class FedArguments:
-    """arguments used in FederatedLLM"""
+    """arguments used in Federated LLM"""
     comm_port: Optional[int] = field(
         default=10000,
         metadata={
             "help": "socket port."
         },
     )
-    comm_addr: Optional[str] = field(
-        default="127.0.0.1:10000",
+    comm_ip: Optional[str] = field(
+        default="127.0.0.1",
         metadata={
-            "help": "socket address."
+            "help": "socket ip."
         },
     )
     role: Optional[str] = field(
@@ -78,6 +80,18 @@ class FedLoraConfig:
         metadata={
             "help": "lora configuration for target modules and target layers"
         },
+    )
+    vocab_size: Optional[int] = field(
+        default=32000,
+        metadata={"help": "vocabulary size"},
+    )
+    hidden_size: Optional[int] = field(
+        default=4096,
+        metadata={"help": "hidden size"},
+    )
+    output_layer_name: Optional[int] = field(
+        default="lm_head",
+        metadata={"help": "output_layer_name"},
     )
 
 
@@ -332,6 +346,15 @@ def parse_args():
     if not model_args.is_baseline():
         lora_config_args.peft_lora_config.peft_type = FedPeftType.FED_LORA
         lora_config_args.peft_lora_config.task_type = FedTaskType.FED_CAUSAL_LM
+    else:
+        lora_config_args.peft_lora_config.task_type = FedTaskType.CAUSAL_LM
+
+    from .fed_model import FedPeftModelForCausalLM
+
+    PEFT_TYPE_TO_MODEL_MAPPING.__setitem__(FedPeftType.FED_LORA, FedLoraModel)
+    PEFT_TYPE_TO_TUNER_MAPPING.__setitem__(FedPeftType.FED_LORA.value, FedLoraModel)
+    PEFT_TYPE_TO_CONFIG_MAPPING.__setitem__(FedPeftType.FED_LORA.value, LoraConfig)
+    MODEL_TYPE_TO_PEFT_MODEL_MAPPING.__setitem__(FedTaskType.FED_CAUSAL_LM.value, FedPeftModelForCausalLM)
 
     # Log on each process the small summary:
     logging.info(

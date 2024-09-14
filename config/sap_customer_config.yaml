@@ -1,5 +1,6 @@
 ---
-comm_addr: "127.0.0.1:10000"
+comm_ip: "127.0.0.1"
+comm_port: 10000
 role: "customer"
 part_id: "2000"
 use_lora: false
@@ -15,16 +16,13 @@ peft_lora_config:
   # - "up_proj"
   # - "gate_proj"
   # - "down_proj"
-  layers_to_transform: # [15, 31] [19, 39] [29, 59] list(range(0, 32)) None
-    - 15
-    - 31
+  layers_to_transform: "range(0, 32)" # [15, 31] [19, 39] [29, 59] list(range(0, 32)) None
 learning_rate: 0.005
 model_type: "sap"
-pretrained_model_name_or_path: "../../../data/Llama2-7b-hf"
 num_train_epochs: 1
 train_dataset_name_or_paths:
   super_glue-boolq: "@tjasad/Slovene_SuperGLUE_BoolQ"    # Downloading form the internet if starts with @.
-data_collator: "qlora",
+data_collator: "qlora"
 per_device_eval_batch_size: 32
 eval_tasks: "boolq"
 evaluation_strategy: "no"

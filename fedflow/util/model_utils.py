@@ -8,7 +8,6 @@ import torch
 from peft import get_peft_model, LoraConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, TrainingArguments
 
-from fedflow.llm.arguments import ModelArguments, FedLoraConfig
 from fedflow.register import models, args
 from fedflow.util import send_tensor, recv_tensor, CommProfiler
 
@@ -17,49 +16,50 @@ DEFAULT_MODEL_INIT_KWARGS = {"torch_dtype": torch.bfloat16, "trust_remote_code":
 
 @dataclass
 class BaseModelTokenizerHandler:
+    from fedflow.llm.arguments import ModelArguments, FedLoraConfig
     model_cls = AutoModelForCausalLM
     model_args: ModelArguments = lambda: args["model_args"]
     config_args: FedLoraConfig = lambda: args["lora_config_args"]
 
     @classmethod
     def _model_args(cls, update_args=None):
-        args = DEFAULT_MODEL_INIT_KWARGS.copy()
-        args.update((k, v) for k, v in asdict(cls.model_args()).items() if k in args)
+        args_ = DEFAULT_MODEL_INIT_KWARGS.copy()
+        args_.update((k, v) for k, v in asdict(cls.model_args()).items() if k in args_)
         if update_args is not None:
-            args.update(update_args)
-        return args
+            args_.update(update_args)
+        return args_
 
     @classmethod
-    def model_post_init(cls, model):
-        print(model)
+    def model_post_init(cls):
         if cls.model_args().is_baseline() and cls.config_args().use_lora:
-            model = get_peft_model(model, cls.config_args().peft_lora_config)
-            model.print_trainable_parameters()
-        return model
+            cls.model = get_peft_model(cls.model, cls.config_args().peft_lora_config)
+            cls.model.print_trainable_parameters()
+        print(cls.model)
+        return cls.model
 
     @classmethod
-    def tokenizer_post_init(cls, tokenizer):
+    def tokenizer_post_init(cls):
         if cls.model_args().pad_with_unk_token:
-            tokenizer.pad_token = tokenizer.unk_token
-        print(tokenizer)
-        return tokenizer
+            cls.tokenizer.pad_token = cls.tokenizer.unk_token
+        print(cls.tokenizer)
+        return cls.tokenizer
 
     @classmethod
     def get_base_model(cls, state_dict=None, **kwargs):
-        model = cls.model_cls.from_pretrained(cls.model_args().pretrained_model_name_or_path, **cls._model_args(),
-                                              state_dict=state_dict, **kwargs)
-        return cls.model_post_init(model)
+        cls.model = cls.model_cls.from_pretrained(cls.model_args().pretrained_model_name_or_path, **cls._model_args(),
+                                                  state_dict=state_dict, **kwargs)
+        return cls.model_post_init()
 
     @classmethod
     def get_base_tokenizer(cls, **kwargs):
         tokenizer_name_or_path = cls.model_args().tokenizer_name_or_path if cls.model_args().tokenizer_name_or_path else (
             cls.model_args().pretrained_model_name_or_path)
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, **cls._model_args())
-        return cls.tokenizer_post_init(tokenizer)
+        cls.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, **cls._model_args())
+        return cls.tokenizer_post_init()
 
     @classmethod
     def get_base_model_and_tokenizer(cls, state_dict=None, **kwargs):
-        return cls.get_base_model(state_dict=state_dict, **kwargs), cls.get_base_tokenizer(**kwargs)
+        return cls.get_base_tokenizer(**kwargs), cls.get_base_model(state_dict=state_dict, **kwargs)
 
     @classmethod
     def get_config(cls, **kwargs):
@@ -76,7 +76,7 @@ def get_base_model_and_tokenizer(**kwargs):
         model, tokenizer
     Examples:
         ```python
-        model, tokenizer = get_base_model_and_tokenizer("sap")
+        tokenizer, model = get_base_model_and_tokenizer("sap")
         ```
     """
     model_args: ModelArguments = args["model_args"]

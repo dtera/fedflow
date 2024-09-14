@@ -3,7 +3,9 @@
 import logging
 import pickle
 import socket
+import threading
 import time
+from queue import SimpleQueue
 
 import numpy as np
 import termplotlib as tpl
@@ -134,7 +136,7 @@ def numpy_pickle_decoding(data):
 def init_tcp_client(ip="127.0.0.1", port=12345):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((ip, port))
-    print("device connected")
+    print(f"Client is connected to {ip}:{port}")
     return s
 
 
@@ -185,11 +187,11 @@ def init_tcp_server(ip="0.0.0.0", port=12345):
     print(f"Server is listening on {socket.gethostbyname(socket.gethostname())}:{port}")
     s.listen(1)
     conn, addr = s.accept()
-    print(f"Client[addr:{addr}] is connected")
+    print(f"Client{addr} is connected")
     return conn
 
 
-def tcp_recv(s: socket.socket = None, buffer_size=1024):
+def tcp_recv(s: socket.socket = None, buffer_size=1024, data_consumer=None, is_break=True, is_running=lambda: True):
     """recursively read tensor from buffer
 
     Args:
@@ -200,11 +202,16 @@ def tcp_recv(s: socket.socket = None, buffer_size=1024):
         _type_: _description_
     """
     data = b""
-    while True:
+    while is_running():
         temp = s.recv(buffer_size)
         data += temp
         if temp.endswith(END_OF_MESSAGE):
-            break
+            if data_consumer is not None:
+                data = data.rstrip(END_OF_MESSAGE)
+                data_consumer(data)
+                data = b""
+            if is_break:
+                break
         if temp == END_OF_GENERATE:
             print("received END_OF_GENERATE")
             return
@@ -220,3 +227,144 @@ ENCODING_MAP = {
 DECODING_MAP = {
     "numpy_pickle": numpy_pickle_decoding,
 }
+
+
+#############################################Channel Communication Begin#############################################
+class SocketChannel(threading.Thread):
+    def __init__(self, channel_conn: socket.socket, send_callback=tcp_sends, recv_callback=tcp_recv, **kwargs):
+        threading.Thread.__init__(self)
+
+        self.daemon = True
+        self.running = True
+        self.send_callback = send_callback
+        self.recv_callback = recv_callback
+        self.buffer_size = kwargs.get("buffer_size", 1024)
+        self.data_encoder = kwargs.get("data_encoder", None)
+        self.data_decoder = kwargs.get("data_decoder", None)
+        self.auto_start = kwargs.get("auto_start", True)
+        self.recv_queue = SimpleQueue()
+        self.channel_conn = channel_conn
+
+        if self.auto_start:
+            self.start()
+
+    def run(self):
+        self.recv_callback(self.channel_conn, self.buffer_size, self._recv, False, self.is_running)
+
+    def send(self, data):
+        enc_data = self.data_encoding(data) if self.data_encoder is None else self.data_encoder(data)
+        self.send_callback(self.channel_conn, enc_data)
+
+    def _recv(self, data):
+        dec_data = self.data_decoding(data) if self.data_decoder is None else self.data_decoder(data)
+        return self.recv_queue.put(dec_data)
+
+    def get_data(self, cid=1):
+        return self.recv_queue.get()
+
+    def data_encoding(self, data):
+        return pickle.dumps(data)
+
+    def data_decoding(self, data):
+        return pickle.loads(data)
+
+    def shutdown(self):
+        self.running = False
+
+    def is_running(self):
+        if self.channel_conn.fileno() == -1:
+            self.shutdown()
+        return self.running
+
+
+class ServerChannel(threading.Thread):
+    def __init__(self, ip="0.0.0.0", port=12345, send_callback=tcp_sends, recv_callback=tcp_recv, **kwargs):
+        threading.Thread.__init__(self)
+
+        self.daemon = True
+        self.running = True
+        self.port = port
+        self.send_callback = send_callback
+        self.recv_callback = recv_callback
+        self.kwargs = kwargs
+        self.clients: dict[str, SocketChannel] = {}
+        self.send_cond: dict[str, threading.Condition] = {}
+
+        self.channel_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.channel_sock.bind((ip, port))
+        print(f"Server is listening on {self.public_address()}")
+        self.channel_sock.listen(5)
+
+        self.start()
+
+    def run(self):
+        while self.running:
+            channel_conn, addr = self.channel_sock.accept()
+            print(f"Client{addr} is connected")
+            client = SocketChannel(channel_conn, self.send_callback, self.recv_callback, **self.kwargs)
+            cid = client.get_data()
+            if cid in self.send_cond:
+                with self.send_cond[cid]:
+                    self.send_cond[cid].notify()
+            self.clients[cid] = client
+
+    def is_connected(self, cid):
+        if cid not in self.clients or self.clients[cid].channel_conn is None:
+            logging.warning(f"Client[{cid}] is not connected")
+            if cid in self.clients:
+                self.clients.pop(cid)
+            return False
+        return True
+
+    def send_wait_for(self, cid=1):
+        if not self.is_connected(cid):
+            if cid not in self.send_cond:
+                self.send_cond[cid] = threading.Condition()
+            with self.send_cond[cid]:
+                self.send_cond[cid].wait()
+
+    def send(self, cid, data):
+        self.send_wait_for(cid)
+
+        self.clients[cid].send(data)
+
+    def sendall(self, data):
+        if len(self.clients) == 0:
+            self.send_wait_for()
+        for cid in self.clients:
+            self.send(cid, data)
+
+    def get_data(self, cid):
+        if self.is_connected(cid):
+            return self.clients[cid].get_data()
+        return
+
+    def get_alldata(self):
+        data = dict([(cid, self.get_data(cid)) for cid in self.clients])
+        data = [(cid, data[cid]) for cid in self.clients if data[cid] is not None]
+        if len(data) > 0:
+            return data[0][1] if len(data) == 1 else dict(data)
+        else:
+            return None
+
+    def public_address(self):
+        return f"tcp://{socket.gethostbyname(socket.gethostname())}:{self.port}"
+
+    def shutdown(self):
+        self.running = False
+
+
+class ClientChannel(SocketChannel):
+    def __init__(self, cid=1, channel_address="tcp://127.0.0.1:12345", send_callback=tcp_sends, recv_callback=tcp_recv,
+                 **kwargs):
+        host, s_port = channel_address.split("//")[-1].split(":")
+        port = int(s_port)
+        channel_conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        channel_conn.connect((host, port))
+        print(f"Client is connected to {channel_address}")
+        kwargs["auto_start"] = False
+
+        super().__init__(channel_conn, send_callback, recv_callback, **kwargs)
+        self.send(cid)  # send client id to server
+        self.start()
+#############################################Channel Communication End###############################################

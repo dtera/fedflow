@@ -5,9 +5,6 @@ from typing import List
 
 from datasets import load_from_disk, load_dataset
 
-from fedflow.llm.arguments import DataTrainingArguments
-from fedflow.register import datas, args
-
 
 @dataclass
 class BaseDatasetHandler:
@@ -45,6 +42,8 @@ def prepare_dataset():
     Returns:
         _type_: processed dataset
     """
+    from fedflow.llm.arguments import DataTrainingArguments
+    from fedflow.register import datas, args
     data_args: DataTrainingArguments = args["data_args"]
     datasets = {}
     for dataset_name, dataset_path in data_args.train_dataset_name_or_paths.items():

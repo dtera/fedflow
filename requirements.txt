@@ -1,3 +1,4 @@
+# Python 3.11.9
 secretflow==1.7.0b0
 peft==0.11.1
 transformers==4.35.2
@@ -15,9 +16,13 @@ trl==0.9.6
 bitsandbytes==0.35.4
 sentencepiece==0.2.0
 deepspeed==0.14.4
-jsonlines
-numexpr
-sqlitedict
-pytablewriter
-tqdm-multiprocess
-zstandard
+pypubsub==4.0.3
+python-socketio==5.11.4
+eventlet==0.36.1
+setuptools==69.5.1
+jsonlines==4.0.0
+numexpr==2.10.1
+sqlitedict==2.1.0
+pytablewriter==1.2.0
+tqdm-multiprocess==0.0.11
+zstandard==0.22.0

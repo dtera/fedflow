@@ -2,7 +2,6 @@
 # Copyright (c) dterazhao. All rights reserved.
 from __future__ import annotations
 
-import socket
 import warnings
 from typing import Any, Optional, Union
 
@@ -12,12 +11,7 @@ from peft.tuners.lora.layer import Linear
 from peft.tuners.tuners_utils import BaseTunerLayer
 from transformers.pytorch_utils import Conv1D
 
-from fedflow.register import commons
-from fedflow.util import (
-    recv_tensor,
-    send_tensor,
-    CommProfiler,
-)
+from fedflow.register import send_queue, recv_queue
 
 
 # Below code is based on https://github.com/microsoft/LoRA/blob/main/loralib/layers.py
@@ -36,12 +30,11 @@ class FedLinear(Linear):
                  fan_in_fan_out: bool = False, is_target_conv_1d_layer: bool = False,
                  init_lora_weights: Union[bool, str] = True, use_rslora: bool = False, use_dora: bool = False,
                  **kwargs) -> None:
+        self.target_name = kwargs.pop("target_name")
         super().__init__(base_layer, adapter_name, r, lora_alpha, lora_dropout, fan_in_fan_out, is_target_conv_1d_layer,
                          init_lora_weights, use_rslora, use_dora, **kwargs)
-        self.profiler: CommProfiler = CommProfiler()
 
     def forward(self, x: torch.Tensor, *args: Any, **kwargs: Any) -> torch.Tensor:
-        self.socket_: socket.socket = commons["socket"]
         self._check_forward_args(x, *args, **kwargs)
         adapter_names = kwargs.pop("adapter_names", None)
 
@@ -66,9 +59,9 @@ class FedLinear(Linear):
     def _apply_fed_lora(self, x, lora_A, lora_B, scaling):
         h = lora_A(x)
         # send compressed activations to customer
-        send_tensor(self.socket_, h, profiler=self.profiler)
+        send_queue.put(h)
         # receive comparessed and transformed activations from customer
-        m_h = recv_tensor(self.socket_, buffer_size)
+        m_h = recv_queue.get().to(x.device).to(x.dtype)
         return lora_B(m_h) * scaling
 
     def _apply_dora(self, x, lora_A, lora_B, scaling, active_adapter):
@@ -78,6 +71,59 @@ class FedLinear(Linear):
         """
         # TODO
         return _apply_fed_lora(x, lora_A, lora_B, scaling)
+
+
+class FedLoraMLayer(torch.nn.Module):
+    def __init__(self, r_v2c: int, r_c2v: int, target_modules: list[str], **kwargs) -> None:
+        """ M matrix
+        1. receive compressed activations from vender as input
+        2. transform on activations
+        3. send back activations
+
+        Args:
+            r_v2c (int): dimension of vender 2 customer
+            r_c2v (int): dimension of customer 2 vender
+            target_modules (list[str]): target modules
+        """
+        super().__init__(**kwargs)
+        self.target_modules = target_modules
+        # q,k,v lora stacked together
+        self.lora_M = torch.nn.ParameterDict()
+        for target_module in self.target_modules:
+            self.lora_M[target_module] = torch.nn.Parameter(
+                torch.zeros((r_v2c, r_c2v)), requires_grad=False
+            )
+
+    def forward(self):
+        for target_module in self.target_modules:
+            # receive compressed activations
+            x = recv_queue.get().to(self.lora_M[target_module].device).to(self.lora_M[target_module].dtype)
+            # transform them
+            x = x @ self.lora_M[target_module]
+            # send them back to cloud
+            send_queue.put(x)
+
+
+class FedLoraMStack(torch.nn.Module):
+    def __init__(self, r_v2c: int, r_c2v: int, target_modules: list[str], num_layers_to_transform: int,
+                 **kwargs) -> None:
+        """Stack of M
+
+        Args:
+            r_v2c (int): dimension of vender 2 customer
+            r_c2v (int): dimension of customer 2 vender
+            target_modules (list[str]): target modules
+            num_layers_to_transform (int): number of m does not necessarily equal to number of decoder layers.
+        """
+        super().__init__(**kwargs)
+        self.layers = torch.nn.ModuleList(
+            [FedLoraMLayer(r_v2c, r_c2v, target_modules) for _ in range(num_layers_to_transform)]
+        )
+
+    def forward(self):
+        for i, layer in enumerate(self.layers):
+            # print(f"{i} th layer")
+            layer()
 
 
 def dispatch_default(

@@ -5,11 +5,11 @@ from dataclasses import asdict
 from transformers import TrainingArguments
 from transformers.integrations import TensorBoardCallback
 
-from fedflow.llm.arguments import FedLoraConfig
-from fedflow.register import args
-
 
 def tb_add_text(trainer, model):
+    from fedflow.llm.arguments import FedLoraConfig
+    from fedflow.register import args
+
     training_args: TrainingArguments = args["training_args"]
     lora_config_args: FedLoraConfig = args["lora_config_args"]
     for cb in trainer.callback_handler.callbacks:

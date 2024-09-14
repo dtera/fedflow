@@ -10,7 +10,11 @@ class EnumBase(str, Enum):
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, Enum):
             return self.value == other.value
-        return False
+        else:
+            return self.value == other
+
+    def __hash__(self):
+        return hash(self.value)
 
 
 def extend_enum(parent_enum, is_raw_enum=False):

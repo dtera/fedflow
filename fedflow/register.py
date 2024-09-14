@@ -2,6 +2,7 @@
 # Copyright (c) dterazhao. All rights reserved.
 import inspect
 import logging
+import queue
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,9 @@ trainers = {}
 args = {}
 
 commons = {}
+
+send_queue = queue.SimpleQueue()
+recv_queue = queue.SimpleQueue()
 
 
 def register(key, module, module_dict):

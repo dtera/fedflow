@@ -14,9 +14,6 @@ from transformers import (
     TrainingArguments,
 )
 
-from fedflow.llm.arguments import FedLoraConfig
-from fedflow.register import args
-
 IGNORE_INDEX = -100
 
 
@@ -270,6 +267,8 @@ def simple_evaluate(
 
 
 def add_eval_callback(train_dataset, trainer, tokenizer):
+    from fedflow.llm.arguments import FedLoraConfig
+    from fedflow.register import args
     training_args: TrainingArguments = args["training_args"]
     lora_config_args: FedLoraConfig = args["lora_config_args"]
     if training_args.do_eval:
