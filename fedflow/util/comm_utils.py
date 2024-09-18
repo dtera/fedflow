@@ -240,33 +240,35 @@ class SocketChannel(threading.Thread):
         threading.Thread.__init__(self)
 
         self.daemon = True
-        self.send_callback = send_callback
-        self.recv_callback = recv_callback
-        self.buffer_size = kwargs.get("buffer_size", 1024)
-        self.data_encoder = kwargs.get("data_encoder", None)
-        self.data_decoder = kwargs.get("data_decoder", None)
-        self.auto_start = kwargs.get("auto_start", True)
-        self.recv_queue = SimpleQueue()
-        self.channel_conn = channel_conn
-        self.set_running(True)
+        self._send_callback = send_callback
+        self._recv_callback = recv_callback
+        self._buffer_size = kwargs.get("buffer_size", 1024)
+        self._data_encoder = kwargs.get("data_encoder", None)
+        self._data_decoder = kwargs.get("data_decoder", None)
+        self._auto_start = kwargs.get("auto_start", True)
+        self._recv_queue = SimpleQueue()
+        self._channel_conn = channel_conn
+        self._set_running(True)
 
-        if self.auto_start:
+        if self._auto_start:
             self.start()
 
     def run(self):
-        self.recv_callback(self.channel_conn, self.buffer_size, self._recv, False,
-                           self.is_running, self.set_running)
-
-    def send(self, data):
-        enc_data = self.data_encoding(data) if self.data_encoder is None else self.data_encoder(data)
-        self.send_callback(self.channel_conn, enc_data)
+        self._recv_callback(self._channel_conn, self._buffer_size, self._recv, False, self.is_running,
+                            self._set_running)
 
     def _recv(self, data):
-        dec_data = self.data_decoding(data) if self.data_decoder is None else self.data_decoder(data)
-        return self.recv_queue.put(dec_data)
+        dec_data = self.data_decoding(data) if self._data_decoder is None else self._data_decoder(data)
+        return self._recv_queue.put(dec_data)
 
-    def get_data(self, cid=1):
-        return self.recv_queue.get()
+    def send(self, data, pre_data_encoder=None):
+        enc_data = data if pre_data_encoder is None else pre_data_encoder(data)
+        enc_data = self.data_encoding(enc_data) if self._data_encoder is None else self._data_encoder(enc_data)
+        self._send_callback(self._channel_conn, enc_data)
+
+    def recv(self, post_data_decoder=None):
+        dec_data = self._recv_queue.get()
+        return dec_data if post_data_decoder is None else post_data_decoder(dec_data)
 
     def data_encoding(self, data):
         return pickle.dumps(data)
@@ -277,15 +279,31 @@ class SocketChannel(threading.Thread):
     def is_running(self):
         return self.running
 
-    def set_running(self, running=True):
+    def _set_running(self, running=True):
         self.running = running
 
     def shutdown(self, __how: int = socket.SHUT_RDWR):
-        self.channel_conn.shutdown(__how)
+        self._channel_conn.shutdown(__how)
 
     def close(self):
-        self.set_running(False)
-        self.channel_conn.close()
+        self._set_running(False)
+        self._channel_conn.close()
+
+    def to_tensor(self, data):
+        return torch.Tensor(data)
+
+    def from_tensor(self, tensor):
+        try:
+            data = tensor.numpy()  # cpu
+        except Exception:
+            data = tensor.cpu().numpy()  # gpu
+        return data
+
+    def send_tensor(self, data):
+        return self.send(data, self.from_tensor)
+
+    def recv_tensor(self):
+        return self.recv(self.to_tensor)
 
 
 class ServerChannel(threading.Thread):
@@ -293,83 +311,110 @@ class ServerChannel(threading.Thread):
         threading.Thread.__init__(self)
 
         self.daemon = True
-        self.running = True
-        self.port = port
-        self.send_callback = send_callback
-        self.recv_callback = recv_callback
-        self.kwargs = kwargs
-        self.clients: dict[str, SocketChannel] = {}
-        self.send_cond: dict[str, threading.Condition] = {}
+        self._running = True
+        self._port = port
+        self._send_callback = send_callback
+        self._recv_callback = recv_callback
+        self._kwargs = kwargs
+        self._clients: dict[str, SocketChannel] = {}
+        self._send_cond: dict[str, threading.Condition] = {}
 
-        self.channel_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.channel_sock.bind((ip, port))
+        self._channel_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._channel_sock.bind((ip, port))
         print(f"Server is listening on {self.public_address()}")
-        self.channel_sock.listen(1)
-        self.channel_sock.settimeout(3)
+        self._channel_sock.listen(1)
+        self._channel_sock.settimeout(3)
 
         self.start()
 
     def run(self):
-        while self.running:
+        while self._running:
             try:
-                channel_conn, addr = self.channel_sock.accept()
+                channel_conn, addr = self._channel_sock.accept()
             except:
                 continue
             print(f"Client{addr} is connected")
-            client = SocketChannel(channel_conn, self.send_callback, self.recv_callback, **self.kwargs)
-            cid = client.get_data()
-            cid = addr[1] if cid == -1 else cid
-            if cid in self.send_cond:
-                with self.send_cond[cid]:
-                    self.send_cond[cid].notify()
-            self.clients[cid] = client
-            self.clients = dict([(id_, self.clients[id_]) for id_ in self.clients if self.clients[id_].is_running()])
+            client = SocketChannel(channel_conn, self._send_callback, self._recv_callback, **self._kwargs)
+            cid = client.recv()
+            cid = str(addr[1] if cid == -1 else cid)
+            if cid in self._send_cond:
+                with self._send_cond[cid]:
+                    self._send_cond[cid].notify()
+            self._clients[cid] = client
+            self._clients = dict(
+                [(id_, self._clients[id_]) for id_ in self._clients if self._clients[id_].is_running()])
 
-    def is_connected(self, cid):
-        if cid in self.clients and self.clients[cid].is_running():
+    def is_connected(self, cid=1):
+        cid = str(cid)
+        if cid in self._clients and self._clients[cid].is_running():
             return True
         logging.warning(f"Client[{cid}] is not connected, waiting for connection...")
         return False
 
-    def send_wait_for(self, cid=1):
+    def _send_wait_for(self, cid=1):
+        cid = str(cid)
         if not self.is_connected(cid):
-            if cid not in self.send_cond:
-                self.send_cond[cid] = threading.Condition()
-            with self.send_cond[cid]:
-                self.send_cond[cid].wait()
+            if cid not in self._send_cond:
+                self._send_cond[cid] = threading.Condition()
+            with self._send_cond[cid]:
+                self._send_cond[cid].wait()
 
-    def send(self, cid, data):
-        self.send_wait_for(cid)
+    def send(self, cid, data, pre_data_encoder=None):
+        self._send_wait_for(cid)
+        self._clients[cid].send(data, pre_data_encoder)
 
-        self.clients[cid].send(data)
+    def send_tensor(self, cid, data):
+        self._send_wait_for(cid)
+        self._clients[cid].send_tensor(data)
 
-    def sendall(self, data):
-        if len(self.clients) == 0:
-            self.send_wait_for()
-        for cid in self.clients:
-            self.send(cid, data)
+    def sendall(self, data, pre_data_encoder=None):
+        if len(self._clients) == 0:
+            self._send_wait_for()
+        for cid in self._clients:
+            self.send(cid, data, pre_data_encoder)
 
-    def get_data(self, cid):
+    def sendall_tensor(self, data):
+        if len(self._clients) == 0:
+            self._send_wait_for()
+        for cid in self._clients:
+            self.send_tensor(cid, data)
+
+    def recv(self, cid, post_data_decoder=None):
+        cid = str(cid)
         if self.is_connected(cid):
-            return self.clients[cid].get_data()
+            return self._clients[cid].recv(post_data_decoder)
         return
 
-    def get_alldata(self):
-        data = dict([(cid, self.get_data(cid)) for cid in self.clients])
-        data = [(cid, data[cid]) for cid in self.clients if data[cid] is not None]
+    def recv_tensor(self, cid):
+        cid = str(cid)
+        if self.is_connected(cid):
+            return self._clients[cid].recv_tensor()
+        return
+
+    def recvall(self, post_data_decoder=None):
+        data = dict([(cid, self.recv(cid, post_data_decoder)) for cid in self._clients])
+        data = [(cid, data[cid]) for cid in self._clients if data[cid] is not None]
+        if len(data) > 0:
+            return data[0][1] if len(data) == 1 else dict(data)
+        else:
+            return None
+
+    def recvall_tensor(self):
+        data = dict([(cid, self.recv_tensor(cid)) for cid in self._clients])
+        data = [(cid, data[cid]) for cid in self._clients if data[cid] is not None]
         if len(data) > 0:
             return data[0][1] if len(data) == 1 else dict(data)
         else:
             return None
 
     def public_address(self):
-        return f"tcp://{socket.gethostbyname(socket.gethostname())}:{self.port}"
+        return f"tcp://{socket.gethostbyname(socket.gethostname())}:{self._port}"
 
     def close(self):
-        for cid in self.clients:
-            self.clients[cid].close()
-        self.running = False
-        self.channel_sock.close()
+        for cid in self._clients:
+            self._clients[cid].close()
+        self._running = False
+        self._channel_sock.close()
 
 
 class ClientChannel(SocketChannel):

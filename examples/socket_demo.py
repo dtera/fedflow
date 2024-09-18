@@ -7,6 +7,8 @@ import time
 from socket import socket
 from time import sleep
 
+import torch
+
 from fedflow.util.comm_utils import ClientChannel, ServerChannel
 
 send_queue = queue.SimpleQueue()
@@ -56,25 +58,40 @@ def async_client_test():
 
 def socket_server_test():
     server = ServerChannel()
-    sleep(10)
     for i in range(10):
         server.sendall(f"server: {i}")
         sleep(1)
-        print(server.get_alldata())
+        print(server.recvall())
     server.close()
 
 
 def socket_client_test(cid):
     client = ClientChannel(cid)
-    sleep(10)
     for i in range(10):
         sleep(1)
         client.send(f"client[{cid}]: {i}")
-        print(client.get_data())
+        print(client.recv())
+
+
+def socket_server_test2():
+    server = ServerChannel()
+    for i in range(10):
+        server.sendall(torch.tensor(range(i + 1)))
+        sleep(1)
+        print(server.recvall())
+    server.close()
+
+
+def socket_client_test2(cid):
+    client = ClientChannel(cid)
+    for i in range(10):
+        sleep(1)
+        client.send(torch.tensor(range(100, i + 101)))
+        print(client.recv())
 
 
 if __name__ == "__main__":
     if len(sys.argv) >= 2 and sys.argv[1] == 'client':
-        socket_client_test(sys.argv[2] if len(sys.argv) > 2 else 1)
+        socket_client_test2(sys.argv[2] if len(sys.argv) > 2 else 1)
     else:
-        socket_server_test()
+        socket_server_test2()
