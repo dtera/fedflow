@@ -191,7 +191,8 @@ def init_tcp_server(ip="0.0.0.0", port=12345):
     return conn
 
 
-def tcp_recv(s: socket.socket = None, buffer_size=1024, data_consumer=None, is_break=True, is_running=lambda: True):
+def tcp_recv(s: socket.socket = None, buffer_size=1024, data_consumer=None, is_break=True, is_running=lambda: True,
+             except_hook=None):
     """recursively read tensor from buffer
 
     Args:
@@ -203,18 +204,22 @@ def tcp_recv(s: socket.socket = None, buffer_size=1024, data_consumer=None, is_b
     """
     data = b""
     while is_running():
-        temp = s.recv(buffer_size)
-        data += temp
-        if temp.endswith(END_OF_MESSAGE):
-            if data_consumer is not None:
-                data = data.rstrip(END_OF_MESSAGE)
-                data_consumer(data)
-                data = b""
-            if is_break:
-                break
-        if temp == END_OF_GENERATE:
-            print("received END_OF_GENERATE")
-            return
+        try:
+            temp = s.recv(buffer_size)
+            data += temp
+            if temp.endswith(END_OF_MESSAGE):
+                if data_consumer is not None:
+                    data = data.rstrip(END_OF_MESSAGE)
+                    data_consumer(data)
+                    data = b""
+                if is_break:
+                    break
+            if temp == END_OF_GENERATE:
+                print("received END_OF_GENERATE")
+                return
+        except:
+            if except_hook is not None:
+                except_hook(False)
 
     return data.rstrip(END_OF_MESSAGE)
 
@@ -235,7 +240,6 @@ class SocketChannel(threading.Thread):
         threading.Thread.__init__(self)
 
         self.daemon = True
-        self.running = True
         self.send_callback = send_callback
         self.recv_callback = recv_callback
         self.buffer_size = kwargs.get("buffer_size", 1024)
@@ -244,12 +248,14 @@ class SocketChannel(threading.Thread):
         self.auto_start = kwargs.get("auto_start", True)
         self.recv_queue = SimpleQueue()
         self.channel_conn = channel_conn
+        self.set_running(True)
 
         if self.auto_start:
             self.start()
 
     def run(self):
-        self.recv_callback(self.channel_conn, self.buffer_size, self._recv, False, self.is_running)
+        self.recv_callback(self.channel_conn, self.buffer_size, self._recv, False,
+                           self.is_running, self.set_running)
 
     def send(self, data):
         enc_data = self.data_encoding(data) if self.data_encoder is None else self.data_encoder(data)
@@ -268,13 +274,18 @@ class SocketChannel(threading.Thread):
     def data_decoding(self, data):
         return pickle.loads(data)
 
-    def shutdown(self):
-        self.running = False
-
     def is_running(self):
-        if self.channel_conn.fileno() == -1:
-            self.shutdown()
         return self.running
+
+    def set_running(self, running=True):
+        self.running = running
+
+    def shutdown(self, __how: int = socket.SHUT_RDWR):
+        self.channel_conn.shutdown(__how)
+
+    def close(self):
+        self.set_running(False)
+        self.channel_conn.close()
 
 
 class ServerChannel(threading.Thread):
@@ -293,28 +304,32 @@ class ServerChannel(threading.Thread):
         self.channel_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.channel_sock.bind((ip, port))
         print(f"Server is listening on {self.public_address()}")
-        self.channel_sock.listen(5)
+        self.channel_sock.listen(1)
+        self.channel_sock.settimeout(3)
 
         self.start()
 
     def run(self):
         while self.running:
-            channel_conn, addr = self.channel_sock.accept()
+            try:
+                channel_conn, addr = self.channel_sock.accept()
+            except:
+                continue
             print(f"Client{addr} is connected")
             client = SocketChannel(channel_conn, self.send_callback, self.recv_callback, **self.kwargs)
             cid = client.get_data()
+            cid = addr[1] if cid == -1 else cid
             if cid in self.send_cond:
                 with self.send_cond[cid]:
                     self.send_cond[cid].notify()
             self.clients[cid] = client
+            self.clients = dict([(id_, self.clients[id_]) for id_ in self.clients if self.clients[id_].is_running()])
 
     def is_connected(self, cid):
-        if cid not in self.clients or self.clients[cid].channel_conn is None:
-            logging.warning(f"Client[{cid}] is not connected")
-            if cid in self.clients:
-                self.clients.pop(cid)
-            return False
-        return True
+        if cid in self.clients and self.clients[cid].is_running():
+            return True
+        logging.warning(f"Client[{cid}] is not connected, waiting for connection...")
+        return False
 
     def send_wait_for(self, cid=1):
         if not self.is_connected(cid):
@@ -350,12 +365,15 @@ class ServerChannel(threading.Thread):
     def public_address(self):
         return f"tcp://{socket.gethostbyname(socket.gethostname())}:{self.port}"
 
-    def shutdown(self):
+    def close(self):
+        for cid in self.clients:
+            self.clients[cid].close()
         self.running = False
+        self.channel_sock.close()
 
 
 class ClientChannel(SocketChannel):
-    def __init__(self, cid=1, channel_address="tcp://127.0.0.1:12345", send_callback=tcp_sends, recv_callback=tcp_recv,
+    def __init__(self, cid=-1, channel_address="tcp://127.0.0.1:12345", send_callback=tcp_sends, recv_callback=tcp_recv,
                  **kwargs):
         host, s_port = channel_address.split("//")[-1].split(":")
         port = int(s_port)

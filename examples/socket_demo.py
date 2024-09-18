@@ -56,18 +56,20 @@ def async_client_test():
 
 def socket_server_test():
     server = ServerChannel()
-    for i in range(100):
-        sleep(1)
-        server.sendall(f"server: {i}")
-        print(server.get_alldata())
     sleep(10)
+    for i in range(10):
+        server.sendall(f"server: {i}")
+        sleep(1)
+        print(server.get_alldata())
+    server.close()
 
 
 def socket_client_test(cid):
     client = ClientChannel(cid)
+    sleep(10)
     for i in range(10):
-        client.send(f"client[{cid}]: {i}")
         sleep(1)
+        client.send(f"client[{cid}]: {i}")
         print(client.get_data())
 
 
