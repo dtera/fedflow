@@ -11,7 +11,8 @@ from peft.tuners.lora.layer import Linear
 from peft.tuners.tuners_utils import BaseTunerLayer
 from transformers.pytorch_utils import Conv1D
 
-from fedflow.register import send_queue, recv_queue
+from fedflow.register import commons
+from fedflow.util import ServerChannel, ClientChannel
 
 
 # Below code is based on https://github.com/microsoft/LoRA/blob/main/loralib/layers.py
@@ -33,6 +34,7 @@ class FedLinear(Linear):
         self.target_name = kwargs.pop("target_name")
         super().__init__(base_layer, adapter_name, r, lora_alpha, lora_dropout, fan_in_fan_out, is_target_conv_1d_layer,
                          init_lora_weights, use_rslora, use_dora, **kwargs)
+        self.sock_channel: ServerChannel = commons["sock_channel"]
 
     def forward(self, x: torch.Tensor, *args: Any, **kwargs: Any) -> torch.Tensor:
         self._check_forward_args(x, *args, **kwargs)
@@ -59,9 +61,9 @@ class FedLinear(Linear):
     def _apply_fed_lora(self, x, lora_A, lora_B, scaling):
         h = lora_A(x)
         # send compressed activations to customer
-        send_queue.put(h)
+        self.sock_channel.send_tensor(h)
         # receive comparessed and transformed activations from customer
-        m_h = recv_queue.get().to(x.device).to(x.dtype)
+        m_h = self.sock_channel.recv_tensor().to(x.device).to(x.dtype)
         return lora_B(m_h) * scaling
 
     def _apply_dora(self, x, lora_A, lora_B, scaling, active_adapter):
@@ -93,15 +95,17 @@ class FedLoraMLayer(torch.nn.Module):
             self.lora_M[target_module] = torch.nn.Parameter(
                 torch.zeros((r_v2c, r_c2v)), requires_grad=False
             )
+        self.sock_channel: ClientChannel = commons["sock_channel"]
 
     def forward(self):
         for target_module in self.target_modules:
             # receive compressed activations
-            x = recv_queue.get().to(self.lora_M[target_module].device).to(self.lora_M[target_module].dtype)
+            x = self.sock_channel.recv_tensor().to(self.lora_M[target_module].device).to(
+                self.lora_M[target_module].dtype)
             # transform them
             x = x @ self.lora_M[target_module]
             # send them back to cloud
-            send_queue.put(x)
+            self.sock_channel.send_tensor(x)
 
 
 class FedLoraMStack(torch.nn.Module):

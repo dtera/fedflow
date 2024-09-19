@@ -5,7 +5,8 @@ from peft import LoraModel, LoraConfig
 from peft.utils import _get_submodules
 
 from fedflow.llm.tuners.lora import dispatchers
-from fedflow.register import args, send_queue
+from fedflow.register import args, commons
+from fedflow.util import ServerChannel
 
 
 class FedLoraModel(LoraModel):
@@ -26,6 +27,7 @@ class FedLoraModel(LoraModel):
     def __init__(self, model, config: LoraConfig, adapter_name) -> None:
         super().__init__(model, config, adapter_name)
         self.output_layer_name = args["lora_config_args"].output_layer_name
+        self.sock_channel: ServerChannel = commons["sock_channel"]
         del_module_keys = [key for key, module in model.named_modules() if
                            isinstance(module, torch.nn.Embedding) or key.split(".")[-1] in ["lora_embedding_A",
                                                                                             "lora_embedding_B",
@@ -33,7 +35,7 @@ class FedLoraModel(LoraModel):
         for del_key in del_module_keys:
             parent, target, target_name = _get_submodules(model, del_key)
             if target_name == self.output_layer_name:
-                send_queue.put(target.weight)
+                self.sock_channel.send(target.weight.data)
             delattr(parent, target_name)
 
     def _create_and_replace(

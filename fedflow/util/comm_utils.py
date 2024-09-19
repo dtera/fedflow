@@ -5,6 +5,7 @@ import pickle
 import socket
 import threading
 import time
+from multiprocessing.pool import ThreadPool
 from queue import SimpleQueue
 
 import numpy as np
@@ -247,6 +248,7 @@ class SocketChannel(threading.Thread):
         self._data_decoder = kwargs.get("data_decoder", None)
         self._auto_start = kwargs.get("auto_start", True)
         self._recv_queue = SimpleQueue()
+        self._send_pool = ThreadPool(processes=1)
         self._channel_conn = channel_conn
         self._set_running(True)
 
@@ -264,7 +266,8 @@ class SocketChannel(threading.Thread):
     def send(self, data, pre_data_encoder=None):
         enc_data = data if pre_data_encoder is None else pre_data_encoder(data)
         enc_data = self.data_encoding(enc_data) if self._data_encoder is None else self._data_encoder(enc_data)
-        self._send_callback(self._channel_conn, enc_data)
+
+        self._send_pool.apply_async(self._send_callback, (self._channel_conn, enc_data))
 
     def recv(self, post_data_decoder=None):
         dec_data = self._recv_queue.get()
@@ -351,7 +354,7 @@ class ServerChannel(threading.Thread):
         logging.warning(f"Client[{cid}] is not connected, waiting for connection...")
         return False
 
-    def _send_wait_for(self, cid=1):
+    def _send_wait_for(self, cid=2000):
         cid = str(cid)
         if not self.is_connected(cid):
             if cid not in self._send_cond:
@@ -359,48 +362,48 @@ class ServerChannel(threading.Thread):
             with self._send_cond[cid]:
                 self._send_cond[cid].wait()
 
-    def send(self, cid, data, pre_data_encoder=None):
+    def send_(self, cid, data, pre_data_encoder=None):
         self._send_wait_for(cid)
         self._clients[cid].send(data, pre_data_encoder)
 
-    def send_tensor(self, cid, data):
+    def send_tensor_(self, cid, data):
         self._send_wait_for(cid)
         self._clients[cid].send_tensor(data)
 
-    def sendall(self, data, pre_data_encoder=None):
+    def send(self, data, pre_data_encoder=None):
         if len(self._clients) == 0:
             self._send_wait_for()
         for cid in self._clients:
-            self.send(cid, data, pre_data_encoder)
+            self.send_(cid, data, pre_data_encoder)
 
-    def sendall_tensor(self, data):
+    def send_tensor(self, data):
         if len(self._clients) == 0:
             self._send_wait_for()
         for cid in self._clients:
-            self.send_tensor(cid, data)
+            self.send_tensor_(cid, data)
 
-    def recv(self, cid, post_data_decoder=None):
+    def recv_(self, cid, post_data_decoder=None):
         cid = str(cid)
         if self.is_connected(cid):
             return self._clients[cid].recv(post_data_decoder)
         return
 
-    def recv_tensor(self, cid):
+    def recv_tensor_(self, cid):
         cid = str(cid)
         if self.is_connected(cid):
             return self._clients[cid].recv_tensor()
         return
 
-    def recvall(self, post_data_decoder=None):
-        data = dict([(cid, self.recv(cid, post_data_decoder)) for cid in self._clients])
+    def recv(self, post_data_decoder=None):
+        data = dict([(cid, self.recv_(cid, post_data_decoder)) for cid in self._clients])
         data = [(cid, data[cid]) for cid in self._clients if data[cid] is not None]
         if len(data) > 0:
             return data[0][1] if len(data) == 1 else dict(data)
         else:
             return None
 
-    def recvall_tensor(self):
-        data = dict([(cid, self.recv_tensor(cid)) for cid in self._clients])
+    def recv_tensor(self):
+        data = dict([(cid, self.recv_tensor_(cid)) for cid in self._clients])
         data = [(cid, data[cid]) for cid in self._clients if data[cid] is not None]
         if len(data) > 0:
             return data[0][1] if len(data) == 1 else dict(data)

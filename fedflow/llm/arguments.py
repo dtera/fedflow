@@ -31,8 +31,8 @@ class FedArguments:
             "help": "socket port."
         },
     )
-    comm_ip: Optional[str] = field(
-        default="127.0.0.1",
+    comm_addr: Optional[str] = field(
+        default="tcp://127.0.0.1:10000",
         metadata={
             "help": "socket ip."
         },
@@ -44,7 +44,7 @@ class FedArguments:
         },
     )
     part_id: Optional[str] = field(
-        default="1000",
+        default="2000",
         metadata={
             "help": "party id."
         },

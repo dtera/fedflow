@@ -13,13 +13,15 @@ from transformers.modeling_outputs import (
     CausalLMOutputWithPast,
 )
 
-from fedflow.register import recv_queue, send_queue
+from fedflow.register import commons
+from fedflow.util import ServerChannel, ClientChannel
 from fedflow.util.config_utils import FedPretrainedConfig
 
 
 class FedPeftModelForCausalLM(PeftModelForCausalLM):
     def __init__(self, model: torch.nn.Module, peft_config: PeftConfig, adapter_name: str = "default") -> None:
         super().__init__(model, peft_config, adapter_name)
+        self.sock_channel: ServerChannel = commons["sock_channel"]
 
     def forward(
             self,
@@ -33,14 +35,14 @@ class FedPeftModelForCausalLM(PeftModelForCausalLM):
             task_ids=None,
             **kwargs,
     ):
-        inputs_embeds = recv_queue.get()
+        inputs_embeds = self.sock_channel.recv_tensor()
         outputs = super().forward(input_ids, attention_mask, inputs_embeds, labels, output_attentions,
                                   output_hidden_states, return_dict, task_ids, **kwargs)
         hidden_states = outputs[0]
-        send_queue.put(hidden_states[:, -1, :].unsqueeze(1))  # send last
-        recv_queue.get()  # prevent 2 consecutive send
+        self.sock_channel.send_tensor(hidden_states[:, -1, :].unsqueeze(1))  # send last
+        self.sock_channel.recv()  # prevent 2 consecutive send
         logging.debug(f"kv cache shape{outputs.past_key_values[0][0].shape}")
-        send_queue.put(torch.tensor(outputs.past_key_values[0][0].shape, dtype=torch.int16))  # send kv shape
+        self.sock_channel.send_tensor(torch.tensor(outputs.past_key_values[0][0].shape, dtype=torch.int16))
 
 
 class FedPreTrainedModelForCustomer(PreTrainedModel):
@@ -49,6 +51,7 @@ class FedPreTrainedModelForCustomer(PreTrainedModel):
     def __init__(self, config: FedPretrainedConfig, tokenizer):
         super().__init__(config)
 
+        self.sock_channel: ClientChannel = commons["sock_channel"]
         self.lora_config_args = config.lora_config_args
         self.peft_lora_config = config.peft_lora_config
         self.vocab_size = self.lora_config_args.vocab_size
@@ -60,7 +63,7 @@ class FedPreTrainedModelForCustomer(PreTrainedModel):
                                           self.peft_lora_config.target_modules,
                                           len(self.peft_lora_config.layers_to_transform))
         self.lm_head = nn.Linear(self.hidden_size, self.vocab_size, bias=False)
-        self.lm_head.load_state_dict({"weight": recv_queue.get()})
+        self.lm_head.load_state_dict({"weight": torch.nn.Parameter(self.sock_channel.recv())})
         self.new_gens = []
         self.tokenizer = tokenizer
         # Initialize weights and apply final processing
@@ -93,12 +96,12 @@ class FedPreTrainedModelForCustomer(PreTrainedModel):
         )
 
         input_embeds = self.embed_tokens(input_ids)
-        send_queue.put(input_embeds)  # initial communication
+        self.sock_channel.send_tensor(input_embeds)  # initial communication
 
         self.lora_M_stack()
 
-        hidden_states = recv_queue.get()  # final comm
-        send_queue.put(torch.zeros(1))
+        hidden_states = self.sock_channel.recv_tensor()  # final comm
+        self.sock_channel.send(torch.zeros(1))
 
         # hidden_states = outputs[0] # og
         if self.config.pretraining_tp > 1:
@@ -134,7 +137,7 @@ class FedPreTrainedModelForCustomer(PreTrainedModel):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        past_kv_shape = recv_queue.get()
+        past_kv_shape = self.sock_channel.recv_tensor()
         bs, h, seq, hi = past_kv_shape.tolist()
         past_key_values = [[torch.zeros((int(bs), int(h), int(seq + 1), int(hi)))]]
 

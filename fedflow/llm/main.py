@@ -1,24 +1,20 @@
 # coding: utf-8
 # Copyright (c) dterazhao. All rights reserved.
-import asyncio
 import logging
-import time
-from socket import socket
 
 import torch.distributed as dist
 from transformers import Trainer
 
 from fedflow.llm import parse_args, fetch_args_from_dataclass, get_last_checkpoint_
-from fedflow.register import send_queue, recv_queue
 from fedflow.util import (
-    prepare_dataset, add_eval_callback, tb_add_text, send_tensor, recv_tensor, CommProfiler
+    prepare_dataset, add_eval_callback, tb_add_text
 )
 from fedflow.util.model_utils import (
     get_base_model_and_tokenizer, save_on_zero_3
 )
 
 
-async def train(data_args, training_args, train_dataset, model, tokenizer):
+def train(data_args, training_args, train_dataset, model, tokenizer):
     from fedflow.register import data_collators
     # Initialize Trainer
     trainer = Trainer(
@@ -56,31 +52,7 @@ async def train(data_args, training_args, train_dataset, model, tokenizer):
         dist.barrier()
 
 
-async def send_messages_polling():
-    socket_: socket = commons["socket"]
-    profiler: CommProfiler = CommProfiler()
-    while True:
-        time.sleep(0.1)
-        if not send_queue.empty():
-            send_tensor(socket_, send_queue.get(), profiler=profiler)
-
-
-async def recv_messages_polling():
-    socket_: socket = commons["socket"]
-    while True:
-        time.sleep(0.1)
-        if not recv_queue.empty():
-            data = recv_tensor(socket_)
-            recv_queue.put(data)
-
-
-async def run(data_args, training_args, train_dataset, model, tokenizer):
-    await asyncio.gather(train(data_args, training_args, train_dataset, model, tokenizer),
-                         send_messages_polling(),
-                         recv_messages_polling())
-
-
-def main():
+if __name__ == "__main__":
     # Parse arguments
     model_args, data_args, training_args, lora_config_args, fed_args = parse_args()
 
@@ -90,8 +62,5 @@ def main():
     # Prepare dataset
     train_dataset = prepare_dataset() if training_args.do_train and not fed_args.is_vender() else None
 
-    asyncio.run(run(data_args, training_args, train_dataset, model, tokenizer))
-
-
-if __name__ == "__main__":
-    main()
+    # Training
+    train(data_args, training_args, train_dataset, model, tokenizer)

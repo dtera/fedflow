@@ -83,9 +83,9 @@ if __name__ == "__main__":
             time.sleep(1)
             try:
                 # toy handshake protocol
-                data = s.recv(3)
+                data = s.recv_(3)
                 if "new" == data.decode():
-                    s.sendall("new".encode())
+                    s.send("new".encode())
                     logging.info("===========Request Coming=========")
                     model.my_generate(s=s)
                 else:

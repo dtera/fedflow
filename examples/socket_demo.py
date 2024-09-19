@@ -59,9 +59,9 @@ def async_client_test():
 def socket_server_test():
     server = ServerChannel()
     for i in range(10):
-        server.sendall(f"server: {i}")
+        server.send(f"server: {i}")
         sleep(1)
-        print(server.recvall())
+        print(server.recv())
     server.close()
 
 
@@ -76,9 +76,9 @@ def socket_client_test(cid):
 def socket_server_test2():
     server = ServerChannel()
     for i in range(10):
-        server.sendall(torch.tensor(range(i + 1)))
+        server.send(torch.tensor(range(i + 1)))
         sleep(1)
-        print(server.recvall())
+        print(server.recv())
     server.close()
 
 
@@ -92,6 +92,6 @@ def socket_client_test2(cid):
 
 if __name__ == "__main__":
     if len(sys.argv) >= 2 and sys.argv[1] == 'client':
-        socket_client_test2(sys.argv[2] if len(sys.argv) > 2 else 1)
+        socket_client_test2(sys.argv[2] if len(sys.argv) > 2 else 2000)
     else:
         socket_server_test2()

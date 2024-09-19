@@ -9,7 +9,9 @@ from .comm_utils import (
     CommProfiler,
     AttnProfiler,
     init_tcp_server,
-    init_tcp_client
+    init_tcp_client,
+    ServerChannel,
+    ClientChannel
 )
 from .data_utils import prepare_dataset
 from .eval_utils import add_eval_callback

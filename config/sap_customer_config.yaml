@@ -1,6 +1,5 @@
 ---
-comm_ip: "127.0.0.1"
-comm_port: 10000
+comm_addr: "tcp://127.0.0.1:10000"
 role: "customer"
 part_id: "2000"
 use_lora: false

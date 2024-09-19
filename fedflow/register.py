@@ -4,6 +4,8 @@ import inspect
 import logging
 import queue
 
+from dataclasses import is_dataclass
+
 logger = logging.getLogger(__name__)
 
 datas = {}
@@ -37,7 +39,7 @@ CODE_GEN_T = """
 import fedflow.{pkg}.{sub_pkg}.{module} as {module}
 import fedflow.register as register
 
-ms = [v for k, v in inspect.getmembers({module}) if inspect.isclass(v)]
+ms = [v for k, v in inspect.getmembers({module}) if inspect.isclass(v) and is_dataclass(v)]
 for m in ms:
     register.register_{sub_pkg}(module[: -len('_{{}}_handler'.format(sub_pkg))], m)
 """
@@ -51,3 +53,4 @@ def register_module(sub_pkg, modules):
 
 
 print(inspect)
+print(is_dataclass)
