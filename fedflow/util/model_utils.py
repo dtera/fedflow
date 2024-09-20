@@ -6,7 +6,7 @@ from dataclasses import dataclass, asdict
 
 import torch
 from peft import get_peft_model, LoraConfig
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, TrainingArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
 from fedflow.register import models, args
 from fedflow.util import send_tensor, recv_tensor, CommProfiler
@@ -103,7 +103,7 @@ def adapt_with_lora(model):
 
 
 def save_on_zero_3(trainer, model):
-    training_args: TrainingArguments = args["training_args"]
+    training_args: SFTConfig = args["training_args"]
     # check if zero3 mode enabled
     if training_args.hf_deepspeed_config.is_zero3():
         # use deepspeed engine internal function to gather state dict

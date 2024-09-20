@@ -5,13 +5,13 @@ peft_lora_config:
   lora_alpha: 32
   lora_dropout: 0
   target_modules:
-    - "query_dense"
-    - "key_value_dense"
-    - "dense"
-  layers_to_transform: "range(0, 32)"
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+  layers_to_transform: "range(0, 24)"
 learning_rate: 0.005
 model_type: "baseline"
-pretrained_model_name_or_path: "../../../data/wxg-welm-3b/WELM-3B-32K-Chat"
+pretrained_model_name_or_path: "Qwen/Qwen2.5-0.5B-Instruct"
 num_train_epochs: 1
 train_dataset_name_or_paths:
   super_glue-boolq: "@tjasad/Slovene_SuperGLUE_BoolQ"

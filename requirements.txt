@@ -1,7 +1,7 @@
 # Python 3.11.9
 secretflow==1.7.0b0
 peft==0.11.1
-transformers==4.35.2
+transformers==4.39.0
 accelerate>=0.21.0
 datasets>=2.0.0
 evaluate>=0.4.0
@@ -26,3 +26,4 @@ sqlitedict==2.1.0
 pytablewriter==1.2.0
 tqdm-multiprocess==0.0.11
 zstandard==0.22.0
+modelscope==1.18.0

@@ -8,3 +8,5 @@ from .arguments import (
     FedLoraConfig, FedArguments, ModelArguments, DataTrainingArguments,
     parse_args, fetch_args_from_dataclass, get_last_checkpoint_
 )
+
+from .fed_trainer import FedTrainer

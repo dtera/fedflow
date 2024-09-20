@@ -2,10 +2,12 @@
 # Copyright (c) dterazhao. All rights reserved.
 import logging
 
+import torch
 import torch.distributed as dist
+from torch.utils.data import TensorDataset
 from transformers import Trainer
 
-from fedflow.llm import parse_args, fetch_args_from_dataclass, get_last_checkpoint_
+from fedflow.llm import parse_args, fetch_args_from_dataclass, get_last_checkpoint_, FedTrainer
 from fedflow.util import (
     prepare_dataset, add_eval_callback, tb_add_text
 )
@@ -14,10 +16,10 @@ from fedflow.util.model_utils import (
 )
 
 
-def train(data_args, training_args, train_dataset, model, tokenizer):
+def train(model_args, data_args, training_args, train_dataset, model, tokenizer):
     from fedflow.register import data_collators
     # Initialize Trainer
-    trainer = Trainer(
+    trainer = (Trainer if model_args.is_baseline() else FedTrainer)(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
@@ -46,8 +48,9 @@ def train(data_args, training_args, train_dataset, model, tokenizer):
         logging.info("Start Training ....")
         logging.info("=" * 60)
         trainer.train(resume_from_checkpoint=checkpoint)
+        dist.init_process_group('gloo', init_method='file:///tmp/fedflow', rank=0, world_size=1)
         dist.barrier()
-        save_on_zero_3(training_args, trainer, model)
+        save_on_zero_3(trainer, model)
     if training_args.deepspeed is not None:
         dist.barrier()
 
@@ -60,7 +63,8 @@ if __name__ == "__main__":
     tokenizer, model = get_base_model_and_tokenizer()
 
     # Prepare dataset
-    train_dataset = prepare_dataset() if training_args.do_train and not fed_args.is_vender() else None
+    train_dataset = prepare_dataset() if training_args.do_train and not fed_args.is_vender() else TensorDataset(
+        torch.zeros((1, 1)))
 
     # Training
-    train(data_args, training_args, train_dataset, model, tokenizer)
+    train(model_args, data_args, training_args, train_dataset, model, tokenizer)

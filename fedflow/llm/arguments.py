@@ -15,6 +15,7 @@ from transformers import (
     set_seed
 )
 from transformers.trainer_utils import get_last_checkpoint
+from trl import SFTConfig
 
 from fedflow.register import args, register_arg
 from .tuners import FedPeftType, FedTaskType, FedLoraModel
@@ -321,7 +322,7 @@ def parse_args():
     # See all possible arguments in src/transformers/training_args.py，or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
     parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments, FedLoraConfig, FedArguments)
+        (ModelArguments, DataTrainingArguments, SFTConfig, FedLoraConfig, FedArguments)
     )
     # If we pass only one argument to the script and it's the path to a json file, let's parse it to get our arguments.
     model_args, data_args, training_args, lora_config_args, fed_args = (
@@ -333,7 +334,7 @@ def parse_args():
     args_dict = parse_cmd_args_dict()
     model_args: ModelArguments = replace(model_args, **fetch_args_from_dict(ModelArguments, args_dict))
     data_args: DataTrainingArguments = replace(data_args, **fetch_args_from_dict(DataTrainingArguments, args_dict))
-    training_args: TrainingArguments = replace(training_args, **fetch_args_from_dict(TrainingArguments, args_dict))
+    training_args: SFTConfig = replace(training_args, **fetch_args_from_dict(SFTConfig, args_dict))
     lora_config_args: FedLoraConfig = replace(lora_config_args, **fetch_args_from_dict(FedLoraConfig, args_dict))
     fed_args: FedArguments = replace(fed_args, **fetch_args_from_dict(FedArguments, args_dict))
     layers_to_transform = lora_config_args.peft_lora_config["layers_to_transform"]
